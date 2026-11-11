@@ -121,7 +121,7 @@ function blank_() {
 function now_() { return Utilities.formatDate(new Date(), 'Asia/Kolkata', 'dd MMM, hh:mm a'); }
 function log_(db, me, x) { db.log.unshift({ t: now_(), who: me.role === 'client' ? 'Client · ' + me.email : me.name, x: String(x).slice(0, 300) }); }
 function newClient_(db, f) {
-  var base = { age: 'below60', salary: 0, exemptAllow: 0, profTax: 0, hpType: 'none', rent: 0, municipal: 0, hpInterest: 0, savingsInt: 0, fdInt: 0, dividend: 0, otherInc: 0, biz: 0, stcg111A: 0, ltcg112A: 0, ltcgOther: 0, stcgOther: 0, d80C: 0, d80CCD1B: 0, d80D: 0, d80G: 0, dOther: 0, d80CCD2: 0, tds: 0, tcs: 0, advTax: 0, saTax: 0, name: '', pan: '', email: '', phone: '', itr: 'ITR-1', notes: '' };
+  var base = { age: 'below60', salary: 0, exemptAllow: 0, profTax: 0, hpType: 'none', rent: 0, municipal: 0, hpInterest: 0, savingsInt: 0, fdInt: 0, dividend: 0, otherInc: 0, biz: 0, stcg111A: 0, ltcg112A: 0, ltcgOther: 0, stcgOther: 0, d80C: 0, d80CCD1B: 0, d80D: 0, d80G: 0, dOther: 0, d80CCD2: 0, tds: 0, tcs: 0, advTax: 0, saTax: 0, name: '', pan: '', email: '', phone: '', itr: 'ITR-1', notes: '', relation: 'Self' };
   var ff = Object.assign(base, f || {});
   return { id: Utilities.getUuid().slice(0, 8), f: ff, docs: [], prefill: false, comp: null, sent: false, approval: 'none', reason: '', pay: { state: 'unpaid', method: '', utr: '' }, fee: db.settings.fees[ff.itr] || 0, feeReq: null, credit: false, filed: null, everified: false, delivered: false, cred: null, payLink: '', itrv: null, created: now_() };
 }
@@ -141,12 +141,16 @@ function view_(db, me) {
 function register_(db, me, p) {
   if (me.role !== 'client') throw err_('Only customers can start a return here.');
   var mine = db.clients.filter(function (c) { return String(c.f.email).toLowerCase() === me.email; });
-  if (!mine.length) {
-    var c = newClient_(db, { name: String(p.name || '').slice(0, 80) || me.email, phone: String(p.phone || '').slice(0, 20), email: me.email });
-    db.clients.unshift(c);
-    log_(db, me, 'New online customer started a return');
-    write_(db);
-  }
+  if (mine.length && !p.family) return view_(db, me);
+  if (mine.length >= 12) throw err_('You can add up to 12 family members. Please contact us for more.');
+  var pan = String(p.pan || '').toUpperCase().trim();
+  if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) throw err_('PAN format looks wrong.');
+  if (pan && mine.some(function (c) { return String(c.f.pan).toUpperCase() === pan; })) throw err_('A return for this PAN is already in your account.');
+  var rel = ['Self','Spouse','Father','Mother','Son','Daughter','Brother','Sister','Other'].indexOf(p.relation) >= 0 ? p.relation : (mine.length ? 'Other' : 'Self');
+  var c = newClient_(db, { name: String(p.name || '').slice(0, 80) || me.email, phone: String(p.phone || '').slice(0, 20), email: me.email, pan: pan, relation: rel });
+  db.clients.unshift(c);
+  log_(db, me, mine.length ? 'Added family member ' + c.f.name + ' (' + rel + ')' : 'New online customer started a return');
+  write_(db);
   return view_(db, me);
 }
 

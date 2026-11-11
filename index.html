@@ -178,7 +178,11 @@ async function saveToDrive(c){
   const tok=await driveToken();
   busy(true);
   try{
-    const folder=await driveCreate(tok,{name:'Nisnil ITR – '+DB.settings.ay+' – '+c.f.name,mimeType:'application/vnd.google-apps.folder'});
+    const parentName='Nisnil ITR – '+DB.settings.ay;
+    let parent=null;
+    try{const q=encodeURIComponent("name='"+parentName.replace(/'/g,"\\'")+"' and mimeType='application/vnd.google-apps.folder' and trashed=false");const lr=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,webViewLink)',{headers:{Authorization:'Bearer '+tok}});if(lr.ok){const lj=await lr.json();parent=lj.files&&lj.files[0]}}catch(e){}
+    if(!parent)parent=await driveCreate(tok,{name:parentName,mimeType:'application/vnd.google-apps.folder'});
+    const folder=await driveCreate(tok,{name:c.f.name+(c.f.relation&&c.f.relation!=='Self'?' ('+c.f.relation+')':''),mimeType:'application/vnd.google-apps.folder',parents:[parent.id]});
     if(c.itrv&&c.itrv.fid){const r=await api('getFile',{id:c.id,fid:c.itrv.fid});const bin=atob(r.b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);await driveCreate(tok,{name:r.name,parents:[folder.id]},new Blob([u],{type:r.mime||'application/pdf'}))}
     const html='<html><head><meta charset="utf-8"></head><body style="font-family:Arial">'+compSheet(c,true).replace(/<button[^>]*>.*?<\/button>/g,'')+'<p>Acknowledgement: '+esc(c.filed?c.filed.ack:'')+'</p></body></html>';
     await driveCreate(tok,{name:'Computation – '+c.f.name+' – '+DB.settings.ay,mimeType:'application/vnd.google-apps.document',parents:[folder.id]},new Blob([html],{type:'text/html'}));
@@ -336,7 +340,7 @@ function queueView(){
 }
 function queueTable(cs){
   return '<div class="card" style="padding:0"><div class="tbl"><table><thead><tr><th>Client</th><th>PAN</th><th>ITR</th><th>Docs</th><th>Status</th><th class="num">Fee</th><th>Payment</th><th class="num">Tax payable / (refund)</th><th></th></tr></thead><tbody>'+
-  (cs.length?cs.map(c=>{const s=status(c);return '<tr><td><button class="btn" style="border:0;padding:0;height:auto;color:#0F766E;font-weight:500" data-a="open" data-v="'+c.id+'">'+esc(c.f.name)+'</button></td><td class="mono">'+esc(c.f.pan)+'</td><td>'+esc(c.f.itr)+'</td><td>'+c.docs.length+(c.prefill?' + prefill':'')+'</td><td>'+pill(s)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+payLabel(c)+'</td><td class="num">'+(c.comp?INR(c.comp.net):'—')+'</td><td><button class="btn" data-a="open" data-v="'+c.id+'">Open</button></td></tr>'}).join(''):'<tr><td colspan="9" class="muted" style="padding:20px">No clients here.</td></tr>')+
+  (cs.length?cs.map(c=>{const s=status(c);return '<tr><td><button class="btn" style="border:0;padding:0;height:auto;color:#0F766E;font-weight:500" data-a="open" data-v="'+c.id+'">'+esc(c.f.name)+'</button>'+(c.f.relation&&c.f.relation!=='Self'?'<div class="muted">'+esc(c.f.relation)+' of '+esc(c.f.email)+'</div>':'')+'</td><td class="mono">'+esc(c.f.pan)+'</td><td>'+esc(c.f.itr)+'</td><td>'+c.docs.length+(c.prefill?' + prefill':'')+'</td><td>'+pill(s)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+payLabel(c)+'</td><td class="num">'+(c.comp?INR(c.comp.net):'—')+'</td><td><button class="btn" data-a="open" data-v="'+c.id+'">Open</button></td></tr>'}).join(''):'<tr><td colspan="9" class="muted" style="padding:20px">No clients here.</td></tr>')+
   '</tbody></table></div></div>';
 }
 
@@ -454,11 +458,13 @@ function clientView(){
   if(LIVE&&!DB.clients.length)return '<div class="card"><h1>Start your ITR</h1><span class="muted">Welcome! Tell us who you are and we will open your income tax return file. You can upload documents and fill details now, and pay later.</span><div><label for="rgn">Full name (as on PAN)</label><input id="rgn"></div><div><label for="rgp">Mobile</label><input id="rgp" inputmode="tel"></div><button class="btn p" data-a="register">Start my ITR</button></div>';
   if(!S.clientAs||!C(S.clientAs))S.clientAs=DB.clients[0]&&DB.clients[0].id;
   const c=C(S.clientAs);
-  const pick=LIVE?(DB.clients.length>1?'<div class="card"><label for="cas">Return for</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+'</option>').join('')+'</select></div>':''):'<div class="card"><label for="cas">Signed in as (test: pick a client)</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+' · '+esc(x.f.email)+'</option>').join('')+'</select><span class="muted">Live version: “Sign in with Google”.</span></div>';
+  const fam=c?DB.clients.filter(x=>(x.f.email||'').toLowerCase()===(c.f.email||'').toLowerCase()):[];
+  const famBar=c?'<div class="card"><div class="row between"><h2>Family returns</h2><button class="btn" data-a="addFam">+ Add family member</button></div><span class="muted">File for yourself and your family from one login. Each person has their own documents, computation, fee and filed copy.</span><div class="row">'+fam.map(x=>'<button class="btn" data-a="pickFam" data-v="'+x.id+'" style="height:auto;padding:8px 12px;text-align:left;'+(x.id===c.id?'background:#111827;color:#fff;border-color:#111827':'')+'"><div style="font-weight:500">'+esc(x.f.name)+'</div><div style="font-size:12px;opacity:.8">'+esc(x.f.relation||'Self')+' · '+esc(status(x))+'</div></button>').join('')+'</div></div>':'';
+  const pick=LIVE?famBar:'<div class="card"><label for="cas">Signed in as (test: pick a client)</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+' · '+esc(x.f.email)+'</option>').join('')+'</select><span class="muted">Live version: “Sign in with Google”.</span></div>'+famBar;
   if(!c)return pick;
   const s=status(c);
   const B=c.comp;
-  return pick+'<h1>Your ITR · '+esc(DB.settings.ay)+'</h1><div>'+pill(s==='Sent to client'?'Please review your computation':s,s==='Sent to client'?'Computation ready':s)+'</div>'+
+  return pick+'<h1>'+(fam.length>1?esc(c.f.name)+' · ':'Your ')+'ITR · '+esc(DB.settings.ay)+'</h1><div>'+pill(s==='Sent to client'?'Please review your computation':s,s==='Sent to client'?'Computation ready':s)+'</div>'+
   '<div class="card"><h2>1. Upload your documents</h2>'+(c.docs.length?c.docs.map(d=>docRow(c,d)).join(''):'<span class="muted">Form 16, bank interest certificates, investment proofs, capital gains statements.</span>')+'<label for="cup">Add files</label><input id="cup" type="file" multiple data-a="upload" data-v="'+c.id+'"></div>'+
   '<div class="card"><h2>2. Fill your details</h2><span class="muted">Optional: fill what you know and we will check it. If you prefer, just upload documents and our team fills this for you. No payment needed for this step.</span>'+
    (c.f.filledBy?'<div class="note ok">Last updated by '+esc(c.f.filledBy)+'</div>':'')+
@@ -541,7 +547,15 @@ document.addEventListener('click',async e=>{
     case 'signout':signOut();break;
     case 'openFile':openFile(v,el.dataset.fid);break;
     case 'saveDrive':try{await saveToDrive(c)}catch(err){toast(err.message)}break;
-    case 'register':{const n=val('rgn'),ph=val('rgp');if(n.length<3){toast('Enter your full name');break}try{apply(await api('register',{name:n,phone:ph}))}catch(err){toast(err.message)}break}
+    case 'register':{const n=val('rgn'),ph=val('rgp');if(n.length<3){toast('Enter your full name');break}try{apply(await api('register',{name:n,phone:ph,relation:'Self'}))}catch(err){toast(err.message)}break}
+    case 'pickFam':S.clientAs=v;render();window.scrollTo(0,0);break;
+    case 'addFam':modal('<div class="row between"><h2>Add a family member</h2><button class="btn" data-a="close">Close</button></div><span class="muted">Their return is filed separately, under your login. You can upload their documents and pay their fee from here.</span><div class="fgrid"><div><label for="fmn">Full name (as on PAN)</label><input id="fmn"></div><div><label for="fmr">Relation</label><select id="fmr"><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Brother</option><option>Sister</option><option>Other</option></select></div><div><label for="fmp">PAN (optional)</label><input id="fmp" maxlength="10" style="text-transform:uppercase"></div></div><button class="btn p" data-a="addFamYes">Add</button>');break;
+    case 'addFamYes':{const n=val('fmn'),r=val('fmr'),pn=val('fmp').toUpperCase();if(n.length<3){toast('Enter the full name');break}if(pn&&!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pn)){toast('PAN format looks wrong');break}
+      const me=C(S.clientAs);
+      if(LIVE){try{const before=DB.clients.map(x=>x.id);apply(await api('register',{name:n,relation:r,pan:pn,family:true}));const nw=DB.clients.find(x=>before.indexOf(x.id)<0);if(nw)S.clientAs=nw.id;closeModal();render();toast('Added '+n)}catch(err){toast(err.message)}break}
+      const f=Object.assign({},me.f);Object.keys(f).forEach(k=>f[k]=typeof f[k]==='number'?0:'');Object.assign(f,{age:'below60',hpType:'none',itr:'ITR-1',name:n,pan:pn,email:me.f.email,phone:me.f.phone,relation:r});
+      const nc={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees['ITR-1'],feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'};
+      DB.clients.unshift(nc);S.clientAs=nc.id;log('Added family member '+n+' ('+r+')','Client · '+me.f.name);closeModal();save();break}
     case 'role':if(LIVE)break;S.role=v;S.view=v==='owner'?'dash':'queue';S.cur=null;S.reveal={};S.emp=null;S.vaultKey=null;render();break;
     case 'empLogin':{const em=val('em').toLowerCase();const t=DB.team.find(x=>x.email.toLowerCase()===em);if(!t){toast('This Gmail is not registered. Ask the owner.');break}if(!t.active){toast('Access is switched off for this Gmail.');break}S.emp=em;log('Signed in',t.name);persist();render();break}
     case 'saveLink':{if(S.role!=='owner')break;const l=val('plink');if(l&&!/^https:\/\/\S+$/.test(l)){toast('Paste a full https:// Razorpay link');break}c.payLink=l;log((l?'Saved':'Removed')+' Razorpay link for '+c.f.name);save();toast('Link saved: client sees a Pay button');break}
