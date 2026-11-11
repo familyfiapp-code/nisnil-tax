@@ -13,7 +13,16 @@ var ROOT_NAME = 'Nisnil Tax';
 var MAX_FILE = 10 * 1024 * 1024;
 var CLIENT_FIELDS = ['salary','savingsInt','fdInt','hpInterest','ltcg112A','stcg111A','d80C','d80D','tds','phone','notes','filledBy'];
 
-function doGet() { return out_({ ok: true, data: 'Nisnil Income Tax server is running.' }); }
+var FEES_2026 = { 'ITR-1': 999, 'ITR-2': 1999, 'ITR-3': 2999, 'ITR-4': 1499 };
+
+/** Public: GET ?fn=fees returns the current ITR fees for the nisnil.co.in/itr page. Nothing private is returned. */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.fn === 'fees') {
+    var db = read_();
+    return out_({ ok: true, data: { fees: db.settings.fees, ay: db.settings.ay } });
+  }
+  return out_({ ok: true, data: 'Nisnil Income Tax server is running.' });
+}
 
 function doPost(e) {
   var req;
@@ -90,6 +99,7 @@ function read_() {
   var db = JSON.parse(dataFile_().getBlob().getDataAsString() || '{}');
   var b = blank_();
   ['settings','team','clients','log'].forEach(function (k) { if (!db[k]) db[k] = b[k]; });
+  if (!db.settings.feesV2) { db.settings.fees = Object.assign({}, FEES_2026); db.settings.feesV2 = true; dataFile_().setContent(JSON.stringify(db)); }
   return db;
 }
 function write_(db) {
@@ -104,7 +114,7 @@ function write_(db) {
 }
 function blank_() {
   return {
-    settings: { fees: { 'ITR-1': 1499, 'ITR-2': 3499, 'ITR-3': 5999, 'ITR-4': 2999 }, ay: 'AY 2027-28', master: OWNER, vault: null, qr: null, qrNote: '', upi: '' },
+    settings: { fees: Object.assign({}, FEES_2026), feesV2: true, ay: 'AY 2027-28', master: OWNER, vault: null, qr: null, qrNote: '', upi: '' },
     team: [], clients: [], log: []
   };
 }
