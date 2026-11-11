@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nisnil Income Tax</title>
+<meta name="robots" content="noindex">
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script src="config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,sans-serif;color:#111827;background:#F6F7F9;font-size:14px}
+a{color:#0F766E}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.55}
+input,select,textarea{font:inherit;font-size:14px;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#111827;width:100%}
+label{font-size:12px;color:#4B5563;display:block;margin-bottom:4px}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 24px;background:#fff;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:5}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:32px;height:32px;border-radius:8px;background:#0F766E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.seg{display:flex;border:1px solid #D1D5DB;border-radius:999px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:8px 14px;font-size:13px;color:#374151}
+.seg button.on{background:#111827;color:#fff}
+.wrap{display:flex;flex-wrap:wrap;min-height:calc(100vh - 58px)}
+nav{flex:1 1 200px;max-width:230px;background:#fff;border-right:1px solid #E5E7EB;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+nav button{border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;color:#374151;font-size:14px}
+nav button.on{background:#E6F4F1;color:#0F766E;font-weight:500}
+main{flex:999 1 560px;min-width:0;padding:24px;display:flex;flex-direction:column;gap:20px;max-width:1240px}
+.card{background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:21px;font-weight:600}
+h2{margin:0;font-size:16px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.between{justify-content:space-between}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{border:1px solid #E5E7EB;border-radius:12px;background:#fff;padding:16px;display:flex;flex-direction:column;gap:4px}
+.kpi b{font-size:26px;font-weight:600}
+.muted{color:#4B5563;font-size:12px}
+.btn{height:38px;padding:0 14px;border-radius:8px;border:1px solid #D1D5DB;background:#fff;color:#374151;font-size:13px}
+.btn.p{background:#0F766E;border-color:#0F766E;color:#fff}
+.btn.d{background:#111827;border-color:#111827;color:#fff}
+.btn.r{color:#991B1B}
+.pill{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-weight:500;font-size:12px;color:#4B5563;padding:9px 10px;border-bottom:1px solid #E5E7EB;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F1F2F4;vertical-align:middle}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.cols{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.c1{flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:20px}
+.c2{flex:2 1 520px;min-width:0;display:flex;flex-direction:column;gap:20px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+details{border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px}
+summary{cursor:pointer;font-weight:500}
+.note{padding:10px 12px;border-radius:10px;font-size:13px}
+.warn{background:#FEF3C7;color:#92400E}
+.ok{background:#DCFCE7;color:#166534}
+.info{background:#E0F2FE;color:#075985}
+.bad{background:#FEE2E2;color:#991B1B}
+.steps{display:flex;flex-wrap:wrap;gap:6px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:20}
+.modal{position:fixed;inset:0;background:rgba(17,24,39,.45);display:flex;align-items:center;justify-content:center;z-index:15;padding:16px}
+.modal .card{max-width:640px;width:100%;max-height:90vh;overflow:auto}
+textarea.code{font-family:ui-monospace,Menlo,monospace;font-size:12px;height:260px}
+@media (max-width:700px){nav{max-width:none;flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid #E5E7EB}main{padding:14px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="layer"></div>
+<script>
+(function(){
+'use strict';
+const KEY='nisnil_tax_console_v1';
+const INR=n=>(n<0?'(':'')+'₹'+Math.abs(Math.round(n)).toLocaleString('en-IN')+(n<0?')':'');
+const N=v=>{const x=Number(String(v==null?'':v).replace(/[,₹\s]/g,''));return isFinite(x)?x:0};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const now=()=>new Date().toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+const uid=()=>Math.random().toString(36).slice(2,10);
+
+/* ---------- storage ---------- */
+let mem=null;
+const CFG=window.TAX_CONFIG||{};
+const LIVE=!!CFG.TAX_API;
+function load(){if(LIVE)return null;try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s)}catch(e){}return mem}
+function persist(){if(LIVE)return;mem=DB;try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
+function seed(){
+  const base={age:'below60',salary:0,exemptAllow:0,profTax:0,hpType:'none',rent:0,municipal:0,hpInterest:0,savingsInt:0,fdInt:0,dividend:0,otherInc:0,biz:0,stcg111A:0,ltcg112A:0,ltcgOther:0,stcgOther:0,d80C:0,d80CCD1B:0,d80D:0,d80G:0,dOther:0,d80CCD2:0,tds:0,tcs:0,advTax:0,saTax:0};
+  const mk=(o,f)=>Object.assign({id:uid(),docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:0,feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'},o,{f:Object.assign({},base,f)});
+  return {
+    settings:{fees:{'ITR-1':1499,'ITR-2':3499,'ITR-3':5999,'ITR-4':2999},ay:'AY 2027-28',master:'familyfi.app@gmail.com',vault:null,qr:null,qrNote:'',upi:''},
+    team:[{name:'Preparer 1',email:'preparer1@gmail.com',active:true}],
+    log:[{t:now(),who:'System',x:'Test build created with sample clients'}],
+    clients:[
+      mk({fee:1499,docs:[{n:'Form16_2026-27.pdf',d:now()},{n:'Bank_interest.pdf',d:now()},{n:'80C_proofs.pdf',d:now()}],prefill:true},{name:'Sample Client A',pan:'ABCPX1234X',email:'clienta@gmail.com',phone:'98XXXXXX01',itr:'ITR-1',salary:1400000,savingsInt:4200,d80C:150000,d80D:25000,tds:85000}),
+      mk({fee:3499,docs:[{n:'Form16.pdf',d:now()},{n:'Broker_CG_statement.pdf',d:now()}],prefill:true},{name:'Sample Client B',pan:'ABCPY5678Y',email:'clientb@gmail.com',phone:'98XXXXXX02',itr:'ITR-2',salary:2200000,stcg111A:60000,ltcg112A:210000,fdInt:38000,d80C:150000,tds:310000}),
+      mk({fee:2999,docs:[{n:'Bank_statements.pdf',d:now()}],prefill:true},{name:'Sample Client C',pan:'ABCPZ9012Z',email:'clientc@gmail.com',phone:'98XXXXXX03',itr:'ITR-4',biz:900000,savingsInt:12000,d80C:100000,advTax:20000}),
+      mk({fee:1499},{name:'Sample Client D',pan:'ABCPW3456W',email:'clientd@gmail.com',phone:'98XXXXXX04',itr:'ITR-1'})
+    ]
+  };
+}
+let DB=LIVE?{settings:{fees:{},ay:'',master:'',vault:null,qr:null,qrNote:'',upi:''},team:[],clients:[],log:[]}:(load()||seed());
+if(!('qr' in DB.settings)){DB.settings.qr=null;DB.settings.qrNote='';DB.settings.upi=''}
+DB.team.forEach(t=>{if(t.active===undefined)t.active=true;delete t.modules});
+persist();
+
+
+/* ---------- UI state ---------- */
+const S={role:LIVE?null:'owner',view:'dash',emp:null,me:null,snap:null,notes:[],busy:0,cur:null,clientAs:null,tab:'All',vaultKey:null,reveal:{},q:''};
+/* ---------- live server + Google sign-in ---------- */
+let auth=null,tokenClient=null,pendingAuth=[];
+try{const a0=JSON.parse(sessionStorage.getItem('nn_tax_auth')||'null');if(a0&&a0.exp>Date.now()+60000)auth=a0}catch(e){}
+function tokenOk(){return !!(auth&&auth.tok&&auth.exp>Date.now()+60000)}
+function gsiClient(){
+  if(tokenClient)return tokenClient;
+  if(!(window.google&&google.accounts&&google.accounts.oauth2))throw new Error('Google sign-in did not load. Check your internet and reload.');
+  tokenClient=google.accounts.oauth2.initTokenClient({client_id:CFG.CLIENT_ID,scope:'openid email',
+    callback:r=>{if(!r||r.error||!r.access_token){const e=new Error((r&&(r.error_description||r.error))||'Sign-in was cancelled.');const w=pendingAuth;pendingAuth=[];w.forEach(x=>x.rej(e));return}
+      auth={tok:r.access_token,exp:Date.now()+Number(r.expires_in||3600)*1000};try{sessionStorage.setItem('nn_tax_auth',JSON.stringify(auth))}catch(e){}
+      const w=pendingAuth;pendingAuth=[];w.forEach(x=>x.res(auth.tok))},
+    error_callback:e=>{const w=pendingAuth;pendingAuth=[];w.forEach(x=>x.rej(new Error(e&&e.type==='popup_closed'?'The Google window was closed before sign-in finished.':'Sign-in failed.')))}});
+  return tokenClient;
+}
+function signIn(){return new Promise((res,rej)=>{pendingAuth.push({res,rej});try{gsiClient().requestAccessToken({prompt:'select_account'})}catch(e){const w=pendingAuth;pendingAuth=[];w.forEach(x=>x.rej(e))}})}
+function signOut(){try{if(auth)google.accounts.oauth2.revoke(auth.tok,()=>{})}catch(e){}try{sessionStorage.removeItem('nn_tax_auth')}catch(e){}auth=null;S.role=null;S.me=null;S.vaultKey=null;S.reveal={};render()}
+function busy(on){S.busy=Math.max(0,S.busy+(on?1:-1));const b=document.getElementById('busy');if(b)b.style.display=S.busy?'block':'none'}
+async function api(fn,arg){
+  if(!tokenOk())throw Object.assign(new Error('Please sign in again.'),{code:'AUTH'});
+  busy(true);
+  try{
+    const r=await fetch(CFG.TAX_API,{method:'POST',body:JSON.stringify({fn,token:auth.tok,args:[arg]}),redirect:'follow'});
+    const o=await r.json();
+    if(o&&o.ok)return o.data;
+    const e=new Error((o&&o.error)||'The server did not answer. Try again.');e.code=o&&o.code;throw e;
+  }catch(e){if(e&&e.message==='Failed to fetch')throw new Error('Could not reach the server. Check your internet.');throw e}
+  finally{busy(false)}
+}
+function apply(v){
+  S.me=v.me;S.role=v.me.role;
+  if(v.db){DB=v.db;S.snap=snapOf(DB)}
+  if(S.role==='employee'||S.role==='owner'){if(S.view==='dash'&&S.role==='employee')S.view='queue'}
+  render();
+}
+function snapOf(d){const m={};d.clients.forEach(c=>m[c.id]=JSON.stringify(c));return {c:m,settings:JSON.stringify(d.settings),team:JSON.stringify(d.team)}}
+async function boot(){
+  if(!LIVE){render();return}
+  if(!tokenOk()){render();return}
+  try{apply(await api('load'))}catch(e){if(e.code==='AUTH'){auth=null;try{sessionStorage.removeItem('nn_tax_auth')}catch(x){}}toast(e.message);render()}
+}
+async function liveSave(){
+  const sn=S.snap||{c:{},settings:'',team:''};
+  const p={clients:DB.clients.filter(c=>sn.c[c.id]!==JSON.stringify(c)),deleted:Object.keys(sn.c).filter(id=>!C(id)),notes:S.notes.splice(0)};
+  if(S.role!=='client'&&JSON.stringify(DB.settings)!==sn.settings)p.settings=DB.settings;
+  if(S.role==='owner'&&JSON.stringify(DB.team)!==sn.team)p.team=DB.team;
+  if(!p.clients.length&&!p.deleted.length&&!p.settings&&!p.team&&!p.notes.length)return;
+  try{apply(await api('sync',p))}catch(e){toast(e.code==='AUTH'?'Sign-in expired: please sign in again':'Not saved: '+e.message);if(e.code==='AUTH'){auth=null}else{try{apply(await api('load'))}catch(x){}}}
+}
+async function fileB64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=rej;r.readAsDataURL(f)})}
+async function uploadFiles(c,files,kind){
+  for(const f of files){
+    if(f.size>10*1024*1024){toast(f.name+' is over 10 MB');continue}
+    try{const b64=await fileB64(f);apply(await api('upload',{id:c.id,name:f.name,mime:f.type,b64,kind}))}catch(e){toast('Upload failed: '+e.message)}
+  }
+}
+function saveBlob(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
+async function openFile(id,fid){
+  try{const r=await api('getFile',{id,fid});const bin=atob(r.b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);saveBlob(r.name,new Blob([u],{type:r.mime}))}catch(e){toast('Could not open: '+e.message)}
+}
+const docRow=(c,d)=>'<div class="row between" style="border-bottom:1px solid #F1F2F4;padding:6px 0"><span>'+esc(d.n)+'</span><span class="row"><span class="muted">'+esc(d.d)+(d.by?' · '+esc(d.by):'')+'</span>'+(LIVE&&d.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(d.fid)+'">Open</button>':'')+'</span></div>';
+const itrvName=c=>c.itrv?(c.itrv.n||c.itrv):'';
+
+function empName(){if(LIVE)return S.me?S.me.name:'Employee';const t=DB.team.find(x=>x.email.toLowerCase()===S.emp);return t?t.name:'Employee'}
+function log(x,who){if(LIVE){S.notes.push(String(x));return}DB.log.unshift({t:now(),who:who||(S.role==='owner'?'Owner':S.role==='employee'?empName():'Client'),x});DB.log=DB.log.slice(0,300)}
+function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
+const C=id=>DB.clients.find(c=>c.id===id);
+
+/* ---------- tax engine (FY 2026-27 / AY 2027-28 and FY 2025-26 / AY 2026-27: same slabs) ---------- */
+const SLABS={
+  new:[[400000,0],[800000,.05],[1200000,.10],[1600000,.15],[2000000,.20],[2400000,.25],[Infinity,.30]],
+  old_below60:[[250000,0],[500000,.05],[1000000,.20],[Infinity,.30]],
+  old_60to79:[[300000,0],[500000,.05],[1000000,.20],[Infinity,.30]],
+  old_80plus:[[500000,0],[1000000,.20],[Infinity,.30]]
+};
+function slab(inc,s){let t=0,prev=0;for(const [lim,r] of s){if(inc>prev){t+=(Math.min(inc,lim)-prev)*r}prev=lim}return t}
+function compute(f,regime){
+  const old=regime==='old';const sl=old?SLABS['old_'+f.age]:SLABS.new;const exLimit=sl[0][0];
+  const sal=N(f.salary);const std=sal>0?Math.min(sal,old?50000:75000):0;
+  const exA=old?N(f.exemptAllow):0;const pt=old?N(f.profTax):0;
+  const salInc=Math.max(0,sal-exA-std-pt);
+  let hp=0;
+  if(f.hpType==='self'){hp=old?-Math.min(N(f.hpInterest),200000):0}
+  else if(f.hpType==='let'){const nav=Math.max(0,N(f.rent)-N(f.municipal));hp=nav*0.7-N(f.hpInterest);hp=old?Math.max(hp,-200000):Math.max(hp,0)}
+  const oth=N(f.savingsInt)+N(f.fdInt)+N(f.dividend)+N(f.otherInc);
+  const biz=N(f.biz);const stO=N(f.stcgOther);
+  const normal=Math.max(0,salInc+hp+oth+biz+stO);
+  const s111=N(f.stcg111A),l112=N(f.ltcg112A),lO=N(f.ltcgOther);
+  const special=s111+l112+lO;
+  const gti=normal+special;
+  let ded=N(f.d80CCD2);
+  if(old){
+    const tta=f.age==='below60'?Math.min(N(f.savingsInt),10000):Math.min(N(f.savingsInt)+N(f.fdInt),50000);
+    ded+=Math.min(N(f.d80C),150000)+Math.min(N(f.d80CCD1B),50000)+N(f.d80D)+N(f.d80G)+N(f.dOther)+tta;
+  }
+  ded=Math.min(ded,normal);
+  const normalTI=Math.round(Math.max(0,normal-ded)/10)*10;
+  const total=normalTI+special;
+  const taxN=slab(normalTI,sl);
+  let unused=Math.max(0,exLimit-normalTI);
+  const a1=Math.min(unused,s111);unused-=a1;
+  const t111=0.20*Math.max(0,s111-a1);
+  const l112tax=Math.max(0,l112-125000);const a2=Math.min(unused,l112tax);unused-=a2;
+  const t112=0.125*Math.max(0,l112tax-a2);
+  const tLO=0.125*Math.max(0,lO-Math.min(unused,lO));
+  const taxS=t111+t112+tLO;
+  let reb=0,mr=0;
+  if(old){if(total<=500000)reb=Math.min(taxN+taxS,12500)}
+  else{
+    if(total<=1200000)reb=Math.min(taxN,60000);
+    else if(special===0&&taxN>total-1200000)mr=taxN-(total-1200000);
+  }
+  const before=Math.max(0,taxN+taxS-reb-mr);
+  let sr=0;
+  if(total>50000000)sr=old?.37:.25;else if(total>20000000)sr=.25;else if(total>10000000)sr=.15;else if(total>5000000)sr=.10;
+  const srSpecial=Math.min(sr,.15);
+  const surch=total>5000000?Math.max(0,(taxN-reb-mr))*sr+taxS*srSpecial:0;
+  const cess=(before+surch)*0.04;
+  const liab=Math.round((before+surch+cess)/10)*10;
+  const paid=N(f.tds)+N(f.tcs)+N(f.advTax)+N(f.saTax);
+  return {regime,sal,exA,std,pt,salInc,hp,oth,biz,stO,special,s111,l112,lO,gti,ded,total,taxN,taxS,reb,mr,surch,cess,liab,paid,net:liab-paid,surchargeNote:total>5000000};
+}
+function both(f){const o=compute(f,'old'),n=compute(f,'new');return {o,n,best:n.liab<=o.liab?'new':'old',save:Math.abs(o.liab-n.liab)}}
+function suggestITR(f){
+  if(N(f.biz)>0)return 'ITR-4';
+  const r=compute(f,'new');
+  if(r.total>5000000||N(f.stcg111A)>0||N(f.ltcgOther)>0||N(f.stcgOther)>0||N(f.ltcg112A)>125000||f.hpType==='let'&&N(f.rent)>0&&false)return 'ITR-2';
+  return 'ITR-1';
+}
+
+/* ---------- status ---------- */
+const FLOW=['New','Docs uploaded','Computation ready','Sent to client','Approved','Cleared to file','Filed','E-verified','Delivered'];
+function cleared(c){return c.pay.state==='paid'||(c.fee===0&&c.feeReq&&c.feeReq.state==='approved')||c.credit}
+function status(c){
+  if(c.delivered)return 'Delivered';
+  if(c.everified)return 'E-verified';
+  if(c.filed)return 'Filed';
+  if(c.approval==='rejected')return 'Rejected';
+  if(c.approval==='approved')return cleared(c)?'Cleared to file':'Awaiting payment';
+  if(c.sent)return 'Sent to client';
+  if(c.comp)return 'Computation ready';
+  if(c.docs.length||c.prefill)return 'Docs uploaded';
+  return 'New';
+}
+const PILL={'New':['#F3F4F6','#374151'],'Docs uploaded':['#E0F2FE','#075985'],'Computation ready':['#EDE9FE','#5B21B6'],'Sent to client':['#EDE9FE','#5B21B6'],'Approved':['#DCFCE7','#166534'],'Rejected':['#FEE2E2','#991B1B'],'Awaiting payment':['#FEF3C7','#92400E'],'Cleared to file':['#DCFCE7','#166534'],'Filed':['#E6F4F1','#115E59'],'E-verified':['#E6F4F1','#115E59'],'Delivered':['#E6F4F1','#115E59']};
+const pill=(t,k)=>{const p=PILL[k||t]||['#F3F4F6','#374151'];return '<span class="pill" style="background:'+p[0]+';color:'+p[1]+'">'+esc(t)+'</span>'};
+function payLabel(c){
+  if(c.pay.state==='paid')return pill('Paid · '+(c.pay.method||'—'),'Approved');
+  if(c.pay.state==='verifying')return pill((c.pay.method||'Payment')+' · verifying','Docs uploaded');
+  if(c.fee===0&&c.feeReq&&c.feeReq.state==='approved')return pill('Free (approved)','Filed');
+  if(c.credit)return pill('Pay later (approved)','Awaiting payment');
+  return pill('Unpaid','Awaiting payment');
+}
+
+/* ---------- vault (AES-GCM, key from passphrase) ---------- */
+const enc=new TextEncoder(),dec=new TextDecoder();
+const b64=a=>btoa(String.fromCharCode.apply(null,new Uint8Array(a)));
+const ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function deriveKey(pass,salt){const k=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function encStr(key,s){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(s));return {iv:b64(iv),ct:b64(ct)}}
+async function decStr(key,o){const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub64(o.iv)},key,ub64(o.ct));return dec.decode(pt)}
+
+/* ---------- render ---------- */
+const app=document.getElementById('app'),layer=document.getElementById('layer');
+function signInView(){
+  const err=LIVE?'':'<div class="note warn">Demo mode: TAX_API is not set in config.js.</div>';
+  return '<div style="max-width:440px;margin:60px auto;padding:0 16px"><div class="card" style="gap:14px;text-align:left"><div class="brand"><div class="logo">N</div><div><div style="font-weight:600;font-size:17px">Nisnil Income Tax</div><div class="muted">ITR filing for individuals</div></div></div>'+err+
+  '<h1 style="font-size:19px">Sign in to file your income tax return</h1><span class="muted">Customers: sign in with your Google account to upload documents, check your computation and pay. Nisnil team members: sign in with the Gmail the owner registered.</span>'+
+  '<button class="btn p" style="height:44px;font-size:15px" data-a="gsignin">Sign in with Google</button><span class="muted">By signing in you agree that Nisnil uses your details only to prepare and file your return. <a href="https://nisnil.co.in/">nisnil.co.in</a></span></div></div>';
+}
+function render(){
+  if(LIVE&&!S.me){app.innerHTML=signInView();return}
+  if(LIVE&&S.role==='blocked'){app.innerHTML='<div style="max-width:440px;margin:60px auto;padding:0 16px"><div class="card"><h1 style="font-size:19px">Access switched off</h1><span class="muted">'+esc(S.me.email)+' no longer has access to the Income Tax console. Ask the owner.</span><button class="btn" data-a="signout">Sign out</button></div></div>';return}
+  const r=S.role;
+  let navItems=[];
+  if(r==='owner')navItems=[['dash','Dashboard'],['queue','Work queue'],['approvals','Approvals'],['payqr','Payment QR & UPI'],['vault','Client logins'],['team','Team access'],['log','Activity log'],['settings','Settings & backup']];
+  else if(r==='employee')navItems=[['queue','My work queue'],['payqr','Payment QR & UPI'],['vault','Client logins']];
+  const me=LIVE?(r==='employee'?S.me:null):(r==='employee'&&S.emp?DB.team.find(t=>t.email.toLowerCase()===S.emp&&t.active):null);
+  if(r==='employee'&&!me){S.emp=null;navItems=[]}
+  const body=r==='employee'&&!me?empSignIn():r==='client'?clientView():S.view==='job'&&S.cur?jobView(C(S.cur)):r==='owner'&&S.view==='dash'?dashView():S.view==='approvals'&&r==='owner'?approvalsView():S.view==='payqr'?qrView():S.view==='vault'?vaultView():S.view==='team'&&r==='owner'?teamView():S.view==='log'&&r==='owner'?logView():S.view==='settings'&&r==='owner'?settingsView():queueView();
+  app.innerHTML=
+  '<header class="top"><div class="brand"><div class="logo">N</div><div><div style="font-weight:600">'+(r==='client'?'Nisnil Tax':'Nisnil Income Tax')+'</div><div class="muted">'+(r==='client'?'Your income tax return':r==='owner'?'Income Tax console · Owner':'Income Tax console · '+(me?esc(me.name):'Employee sign-in'))+(LIVE?'':' · demo')+'</div></div></div>'+(LIVE?'<div class="row"><span class="muted">'+esc(S.me.email)+'</span><span id="busy" class="muted" style="display:none">Saving…</span><button class="btn" data-a="signout">Sign out</button></div></header>':'<div class="row"><span class="muted">View as</span><div class="seg" role="group" aria-label="Role"><button data-a="role" data-v="owner" class="'+(r==='owner'?'on':'')+'">Owner</button><button data-a="role" data-v="employee" class="'+(r==='employee'?'on':'')+'">Employee</button><button data-a="role" data-v="client" class="'+(r==='client'?'on':'')+'">Client</button></div></div></header>')+
+  (r==='client'?'<main style="max-width:520px;margin:0 auto;width:100%">'+body+'</main>':
+  '<div class="wrap"><nav aria-label="Main">'+navItems.map(([k,l])=>'<button data-a="nav" data-v="'+k+'" class="'+((S.view===k||(S.view==='job'&&k==='queue'))?'on':'')+'">'+l+'</button>').join('')+'</nav><main>'+body+'</main></div>');
+}
+
+function dashView(){
+  const cs=DB.clients,st=cs.map(status);
+  const cnt=k=>st.filter(s=>s===k).length;
+  const pend=cs.filter(c=>c.feeReq&&c.feeReq.state==='pending').length+cs.filter(c=>c.pay.state==='verifying').length;
+  const collected=cs.filter(c=>c.pay.state==='paid').reduce((a,c)=>a+c.fee,0);
+  const due=cs.filter(c=>c.approval==='approved'&&!cleared(c)).reduce((a,c)=>a+c.fee,0);
+  return '<h1>Dashboard</h1><div class="grid">'+
+  kpi('Clients',cs.length,'All in '+DB.settings.ay)+kpi('In progress',cs.length-cnt('Filed')-cnt('E-verified')-cnt('Delivered'),'Not yet filed')+kpi('Filed',cnt('Filed')+cnt('E-verified')+cnt('Delivered'),'E-verified: '+(cnt('E-verified')+cnt('Delivered')))+kpi('Needs your approval',pend,'Fee requests + GPay checks')+kpi('Fees collected',INR(collected),'Paid status only')+kpi('Fees due',INR(due),'Approved, not paid')+
+  '</div>'+queueTable(cs)+'<div class="card"><h2>Recent activity</h2>'+DB.log.slice(0,6).map(l=>'<div class="row" style="gap:14px"><span class="muted" style="min-width:110px">'+esc(l.t)+'</span><span>'+esc(l.who)+': '+esc(l.x)+'</span></div>').join('')+'</div>';
+}
+const kpi=(l,v,n)=>'<div class="kpi"><span class="muted" style="font-size:13px">'+l+'</span><b>'+esc(v)+'</b><span class="muted">'+esc(n)+'</span></div>';
+
+function queueView(){
+  const tabs=['All','New','Docs uploaded','Computation ready','Sent to client','Rejected','Awaiting payment','Cleared to file','Filed'];
+  const cs=DB.clients.filter(c=>(S.tab==='All'||status(c)===S.tab)&&(!S.q||(c.f.name+' '+c.f.pan).toLowerCase().includes(S.q.toLowerCase())));
+  return '<div class="row between"><h1>'+(S.role==='owner'?'Work queue':'My work queue')+'</h1><div class="row"><label for="q" style="position:absolute;left:-9999px">Search</label><input id="q" data-i="q" placeholder="Search name or PAN" value="'+esc(S.q)+'" style="width:220px"><button class="btn p" data-a="newClient">+ New client</button></div></div>'+
+  '<div class="row">'+tabs.map(t=>{const n=t==='All'?DB.clients.length:DB.clients.filter(c=>status(c)===t).length;return '<button class="btn" data-a="tab" data-v="'+t+'" style="border-radius:999px;'+(S.tab===t?'background:#111827;color:#fff;border-color:#111827':'')+'">'+t+' · '+n+'</button>'}).join('')+'</div>'+queueTable(cs);
+}
+function queueTable(cs){
+  return '<div class="card" style="padding:0"><div class="tbl"><table><thead><tr><th>Client</th><th>PAN</th><th>ITR</th><th>Docs</th><th>Status</th><th class="num">Fee</th><th>Payment</th><th class="num">Tax payable / (refund)</th><th></th></tr></thead><tbody>'+
+  (cs.length?cs.map(c=>{const s=status(c);return '<tr><td><button class="btn" style="border:0;padding:0;height:auto;color:#0F766E;font-weight:500" data-a="open" data-v="'+c.id+'">'+esc(c.f.name)+'</button></td><td class="mono">'+esc(c.f.pan)+'</td><td>'+esc(c.f.itr)+'</td><td>'+c.docs.length+(c.prefill?' + prefill':'')+'</td><td>'+pill(s)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+payLabel(c)+'</td><td class="num">'+(c.comp?INR(c.comp.net):'—')+'</td><td><button class="btn" data-a="open" data-v="'+c.id+'">Open</button></td></tr>'}).join(''):'<tr><td colspan="9" class="muted" style="padding:20px">No clients here.</td></tr>')+
+  '</tbody></table></div></div>';
+}
+
+function jobView(c){
+  if(!c)return '<p>Client not found.</p>';
+  const s=status(c),cur=Math.max(0,FLOW.indexOf(s==='Rejected'?'Sent to client':s==='Awaiting payment'?'Approved':s));
+  const B=both(c.f),sug=suggestITR(c.f);
+  const owner=S.role==='owner';
+  const fr=c.feeReq;
+  const fields=[
+   ['Personal',[['name','Name','text'],['pan','PAN','text'],['email','Client Gmail','email'],['phone','Mobile','text'],['age','Age group','sel',[['below60','Below 60'],['60to79','60 to 79'],['80plus','80 and above']]],['itr','ITR form','sel',[['ITR-1','ITR-1'],['ITR-2','ITR-2'],['ITR-3','ITR-3'],['ITR-4','ITR-4']]]]],
+   ['Salary',[['salary','Gross salary'],['exemptAllow','Exempt allowances u/s 10 (HRA, LTA) · old regime'],['profTax','Professional tax · old regime']]],
+   ['House property',[['hpType','Type','sel',[['none','None'],['self','Self-occupied'],['let','Let out']]],['rent','Annual rent received'],['municipal','Municipal tax paid'],['hpInterest','Home-loan interest']]],
+   ['Other sources',[['savingsInt','Savings bank interest'],['fdInt','FD / RD interest'],['dividend','Dividend'],['otherInc','Other income']]],
+   ['Business (presumptive)',[['biz','Income u/s 44AD / 44ADA']]],
+   ['Capital gains',[['stcg111A','STCG listed equity, 111A (20%)'],['ltcg112A','LTCG listed equity, 112A (12.5% above ₹1.25 lakh)'],['ltcgOther','Other LTCG (12.5%)'],['stcgOther','Other STCG (slab rate)']]],
+   ['Deductions',[['d80C','80C / 80CCC / 80CCD(1) · old'],['d80CCD1B','80CCD(1B) NPS · old'],['d80D','80D health insurance · old'],['d80G','80G qualifying amount · old'],['dOther','Other Chapter VI-A · old'],['d80CCD2','80CCD(2) employer NPS · both']]],
+   ['Taxes paid',[['tds','TDS (match 26AS)'],['tcs','TCS'],['advTax','Advance tax'],['saTax','Self-assessment tax']]]
+  ];
+  const fld=([k,l,t,o])=>'<div><label for="f_'+k+'">'+l+'</label>'+(t==='sel'?'<select id="f_'+k+'" data-f="'+k+'">'+o.map(([v,x])=>'<option value="'+v+'"'+(c.f[k]===v?' selected':'')+'>'+x+'</option>').join('')+'</select>':'<input id="f_'+k+'" data-f="'+k+'" '+(t?'type="'+t+'"':'inputmode="numeric"')+' value="'+esc(t?c.f[k]:(N(c.f[k])||''))+'">')+'</div>';
+  const line=(l,o,n,b)=>'<tr><td'+(b?' style="font-weight:600"':'')+'>'+l+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+o+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+n+'</td></tr>';
+  const o=B.o,n=B.n;
+  const canGen=c.approval==='approved'&&cleared(c);
+  const credHtml=c.cred?('<div class="row between"><span class="muted">User ID</span><span class="mono">'+esc(c.cred.user)+'</span></div><div class="row between"><span class="muted">Password</span><span class="mono">'+(S.reveal[c.id]?esc(S.reveal[c.id]):'••••••••••')+'</span></div><div class="row"><button class="btn" data-a="reveal" data-v="'+c.id+'">'+(S.reveal[c.id]?'Hide':'Reveal · logged')+'</button><button class="btn" data-a="copyPass" data-v="'+c.id+'">Copy · logged</button><button class="btn" data-a="editCred" data-v="'+c.id+'">Change</button></div>'):'<button class="btn" data-a="editCred" data-v="'+c.id+'">+ Save portal login</button>';
+  return '<div class="row between"><div class="row"><button class="btn" data-a="nav" data-v="queue">← Queue</button><h1>'+esc(c.f.name)+'</h1><span class="mono muted">'+esc(c.f.pan)+'</span>'+pill(c.f.itr+' · '+DB.settings.ay,'New')+pill(s)+'</div>'+(owner?'<button class="btn r" data-a="delClient" data-v="'+c.id+'">Delete client</button>':'')+'</div>'+
+  '<div class="steps">'+FLOW.map((x,i)=>'<span class="pill" style="'+(i<cur?'background:#E6F4F1;color:#115E59':i===cur?'background:#111827;color:#fff':'background:#fff;color:#6B7280;border:1px solid #E5E7EB')+'">'+(i<cur?'✓ ':'')+x+'</span>').join('')+'</div>'+
+  (c.approval==='rejected'?'<div class="note bad">Client rejected the computation: “'+esc(c.reason||'no reason given')+'”. Fix and resend.</div>':'')+
+  '<div class="cols"><div class="c1">'+
+   '<div class="card"><h2>1. Prefill data</h2>'+(c.prefill?'<div class="note ok">Prefill imported'+(c.prefillInfo?': '+esc(c.prefillInfo):'')+'</div>':'<div class="note info">Download from the e-filing portal: e-File → Income Tax Returns → Download pre-filled data. Then choose the file here.</div>')+
+   '<label for="pf">Import prefill JSON</label><input id="pf" type="file" accept=".json,application/json" data-a="prefill" data-v="'+c.id+'"><span class="muted">Reads common fields (PAN, name, DOB, salary, TDS, bank interest). Always check the figures before computing.</span></div>'+
+   '<div class="card"><h2>Portal login</h2>'+credHtml+'<span class="muted">Stored encrypted under '+esc(DB.settings.master)+'. Every reveal and copy is logged.</span></div>'+
+   '<div class="card"><h2>2. Client documents</h2>'+(c.f.filledBy?'<span class="muted">Details last filled by '+esc(c.f.filledBy)+'</span>':'')+(c.f.notes?'<div class="note info">Client note: '+esc(c.f.notes)+'</div>':'')+(c.docs.length?c.docs.map(d=>docRow(c,d)).join(''):'<span class="muted">No documents yet. Client uploads from their portal, or add here.</span>')+'<label for="up">Add document</label><input id="up" type="file" multiple data-a="upload" data-v="'+c.id+'"></div>'+
+   '<div class="card"><h2>3. Checks before filing</h2>'+checks(c,B,sug)+'</div>'+
+  '</div><div class="c2">'+
+   '<div class="card"><div class="row between"><h2>4. Income &amp; deductions</h2><button class="btn p" data-a="saveComp" data-v="'+c.id+'">Save &amp; compute</button></div>'+
+   fields.map(([g,fs],i)=>'<details'+(i<2||fs.some(([k])=>N(c.f[k])>0&&k!=='age')?' open':'')+'><summary>'+g+'</summary><div class="fgrid" style="margin-top:10px">'+fs.map(fld).join('')+'</div></details>').join('')+'</div>'+
+   '<div class="card"><div class="row between"><h2>5. Computation · old vs new regime</h2>'+pill((B.best==='new'?'New':'Old')+' regime saves '+INR(B.save),'Approved')+'</div>'+
+   '<div class="tbl"><table><thead><tr><th>Item</th><th class="num">Old regime</th><th class="num">New regime</th></tr></thead><tbody>'+
+   line('Gross salary',INR(o.sal),INR(n.sal))+line('Less: exempt allowances',INR(-o.exA),INR(-n.exA))+line('Less: standard deduction',INR(-o.std),INR(-n.std))+line('Less: professional tax',INR(-o.pt),INR(-n.pt))+line('Income from salary',INR(o.salInc),INR(n.salInc))+line('House property',INR(o.hp),INR(n.hp))+line('Other sources',INR(o.oth),INR(n.oth))+line('Business (presumptive)',INR(o.biz),INR(n.biz))+line('Capital gains at slab rate',INR(o.stO),INR(n.stO))+line('Capital gains at special rates',INR(o.special),INR(n.special))+line('Gross total income',INR(o.gti),INR(n.gti),1)+line('Less: Chapter VI-A',INR(-o.ded),INR(-n.ded))+line('Total income',INR(o.total),INR(n.total),1)+line('Tax at slab rates',INR(o.taxN),INR(n.taxN))+line('Tax at special rates',INR(o.taxS),INR(n.taxS))+line('Less: rebate u/s 87A',INR(-o.reb),INR(-n.reb))+line('Less: marginal relief (87A)',INR(-o.mr),INR(-n.mr))+line('Surcharge',INR(o.surch),INR(n.surch))+line('Health &amp; education cess 4%',INR(o.cess),INR(n.cess))+line('Total tax liability',INR(o.liab),INR(n.liab),1)+line('Less: taxes paid',INR(-o.paid),INR(-n.paid))+line('Payable / (refund)',INR(o.net),INR(n.net),1)+
+   '</tbody></table></div>'+(o.surchargeNote?'<div class="note warn">Income above ₹50 lakh: surcharge marginal relief is not applied yet. Check manually.</div>':'')+
+   '<span class="muted">Interest u/s 234A/B/C is not calculated yet: add it manually if due.</span>'+
+   '<div class="row"><button class="btn" data-a="viewComp" data-v="'+c.id+'">View client computation</button><button class="btn p" data-a="send" data-v="'+c.id+'"'+(!c.comp||(c.sent&&c.approval!=='rejected')?' disabled':'')+'>'+(c.sent&&c.approval==='none'?'Sent · waiting for client':c.approval==='approved'?'Client approved ✓':'Upload computation to client')+'</button></div></div>'+
+   '<div class="card"><h2>6. Payment gate</h2><div class="grid"><div class="kpi"><span class="muted">Fee</span><b>'+INR(c.fee)+'</b><span class="muted">Standard '+esc(c.f.itr)+': '+INR(DB.settings.fees[c.f.itr]||0)+'</span></div><div class="kpi"><span class="muted">Payment</span><div>'+payLabel(c)+'</div><span class="muted">'+(c.pay.utr?'UTR '+esc(c.pay.utr):'&nbsp;')+'</span></div></div>'+
+   (fr&&fr.state==='pending'?'<div class="note warn">Fee change requested: '+esc(fr.type)+(fr.type==='Discount'?' to '+INR(fr.amount):'')+' · “'+esc(fr.reason)+'” · waiting for owner</div>':fr?'<div class="note '+(fr.state==='approved'?'ok':'bad')+'">Fee request '+esc(fr.type)+' '+esc(fr.state)+'</div>':'')+
+   '<div class="note info">Client can pay any time: by the payment QR'+(DB.settings.qr?' ✓':' (not uploaded yet)')+(c.payLink?' or the Razorpay link ✓':'')+'. Filing stays locked until payment is confirmed.</div>'+
+   (owner?'<div class="fgrid"><div style="grid-column:1/-1"><label for="plink">Razorpay payment link for this client (create it in your Razorpay dashboard, paste here)</label><input id="plink" placeholder="https://rzp.io/..." value="'+esc(c.payLink||'')+'"></div><div><button class="btn d" data-a="saveLink" data-v="'+c.id+'">Save link</button>'+(c.payLink?' <button class="btn" data-a="copyLink" data-v="'+c.id+'">Copy for WhatsApp</button>':'')+'</div></div>':
+   (c.payLink?'<div class="row"><span class="muted">Razorpay link set by owner</span><button class="btn" data-a="copyLink" data-v="'+c.id+'">Copy for WhatsApp</button></div>':'<span class="muted">No Razorpay link yet. Only the owner can add one.</span>'))+
+   '<div class="fgrid"><div><label for="pm">Payment received by</label><select id="pm"><option>UPI QR</option><option>Razorpay link</option><option>Cash at office</option><option>Bank transfer</option></select></div><div><label for="utr">UTR / Razorpay payment ID</label><input id="utr" placeholder="UTR or pay_..."></div><div style="align-self:end"><button class="btn" data-a="payRec" data-v="'+c.id+'"'+(c.pay.state==='paid'?' disabled':'')+'>'+(owner?'Record &amp; verify':'Record · owner verifies')+'</button></div></div>'+
+   '<div class="fgrid"><div><label for="frt">Fee change</label><select id="frt"><option>Discount</option><option>Free filing</option><option>Pay after filing</option></select></div><div><label for="fra">New amount (discount)</label><input id="fra" inputmode="numeric"></div><div><label for="frr">Reason</label><input id="frr" placeholder="e.g. repeat client"></div><div style="align-self:end"><button class="btn d" data-a="feeReq" data-v="'+c.id+'">'+(owner?'Apply':'Send to owner')+'</button></div></div></div>'+
+   '<div class="card"><h2>7. File &amp; deliver</h2>'+(!canGen?'<div class="note warn">Locked until the client approves the computation and payment is cleared (paid, or a free / pay-later request approved by the owner).</div>':'')+
+   '<div class="note info">Uploadable ITR JSON needs the official '+esc(DB.settings.ay)+' schema mapped in. Until then this button exports a draft data file for checking, not for the portal.</div>'+
+   '<div class="row"><button class="btn p" data-a="genJson" data-v="'+c.id+'"'+(canGen?'':' disabled')+'>Generate draft JSON</button></div>'+
+   '<div class="fgrid"><div><label for="ack">Acknowledgement number after upload</label><input id="ack" value="'+esc(c.filed?c.filed.ack:'')+'"'+(canGen?'':' disabled')+'></div><div style="align-self:end"><button class="btn" data-a="markFiled" data-v="'+c.id+'"'+(canGen&&!c.filed?'':' disabled')+'>Mark filed · ask client for OTP</button></div></div>'+
+   '<div class="row"><button class="btn" data-a="everify" data-v="'+c.id+'"'+(c.filed&&!c.everified?'':' disabled')+'>Mark e-verified</button><button class="btn p" data-a="deliver" data-v="'+c.id+'"'+(c.everified&&!c.delivered?'':' disabled')+'>Deliver ITR-V + computation to client</button></div>'+
+   '<label for="itrv">Attach ITR-V (PDF)</label><input id="itrv" type="file" accept=".pdf" data-a="itrv" data-v="'+c.id+'"'+(c.filed?'':' disabled')+'>'+(c.itrv?'<div class="row"><span class="muted">Attached: '+esc(itrvName(c))+'</span>'+(LIVE&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Open</button>':'')+'</div>':'')+'</div>'+
+  '</div></div>';
+}
+function checks(c,B,sug){
+  const f=c.f;const it=[];
+  const ok=(t)=>it.push(['✓','#DCFCE7','#166534',t]),w=(t)=>it.push(['!','#FEF3C7','#92400E',t]),p=(t)=>it.push(['○','#F3F4F6','#374151',t]);
+  /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(f.pan||'')?ok('PAN format valid'):w('PAN format looks wrong');
+  N(f.tds)>0?ok('TDS entered: match it with 26AS'):w('No TDS entered: confirm with 26AS / AIS');
+  sug!==f.itr?w('Income mix suggests '+sug+' (chosen '+f.itr+')'):ok(f.itr+' fits the income entered');
+  c.comp?ok('Computation saved: '+(c.comp.regime==='new'?'new':'old')+' regime'):p('Computation not saved yet');
+  w('Foreign assets? Ask client. Schedule FA is mandatory for residents with any foreign asset');
+  N(f.savingsInt)+N(f.fdInt)===0?w('No interest income: AIS usually shows some, so check'):ok('Interest income included');
+  c.approval==='approved'?ok('Client approved computation'):p('Client approval pending');
+  return it.map(([m,bg,fg,t])=>'<div class="row" style="align-items:flex-start;flex-wrap:nowrap"><span class="pill" style="background:'+bg+';color:'+fg+';min-width:24px;text-align:center">'+m+'</span><span>'+esc(t)+'</span></div>').join('');
+}
+
+function approvalsView(){
+  const fr=DB.clients.filter(c=>c.feeReq&&c.feeReq.state==='pending');
+  const gp=DB.clients.filter(c=>c.pay.state==='verifying');
+  return '<h1>Approvals</h1><div class="card"><h2>Fee change requests</h2><span class="muted">Only you can approve a discount, a free filing or pay-after-filing.</span>'+
+  (fr.length?'<div class="tbl"><table><thead><tr><th>Client</th><th>ITR</th><th class="num">Current fee</th><th>Request</th><th>Reason</th><th></th></tr></thead><tbody>'+fr.map(c=>'<tr><td>'+esc(c.f.name)+'</td><td>'+esc(c.f.itr)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+esc(c.feeReq.type)+(c.feeReq.type==='Discount'?' → '+INR(c.feeReq.amount):'')+'</td><td>'+esc(c.feeReq.reason)+'</td><td><div class="row"><button class="btn p" data-a="frYes" data-v="'+c.id+'">Approve</button><button class="btn" data-a="frNo" data-v="'+c.id+'">Reject</button></div></td></tr>').join('')+'</tbody></table></div>':'<span class="muted">Nothing waiting.</span>')+'</div>'+
+  '<div class="card"><h2>Payments to verify</h2><span class="muted">QR and bank payments: match the UTR on your bank statement. Razorpay link payments: match the payment ID in your Razorpay dashboard.</span>'+
+  (gp.length?'<div class="tbl"><table><thead><tr><th>Client</th><th class="num">Amount</th><th>Method</th><th>UTR / payment ID</th><th></th></tr></thead><tbody>'+gp.map(c=>'<tr><td>'+esc(c.f.name)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+esc(c.pay.method)+'</td><td class="mono">'+esc(c.pay.utr||'—')+'</td><td><div class="row"><button class="btn p" data-a="gpYes" data-v="'+c.id+'">Verified</button><button class="btn" data-a="gpNo" data-v="'+c.id+'">Not found</button></div></td></tr>').join('')+'</tbody></table></div>':'<span class="muted">Nothing waiting.</span>')+'</div>';
+}
+function vaultView(){
+  const v=DB.settings.vault;
+  let top;
+  if(!v)top=S.role==='owner'?'<div class="note warn">Set a vault passphrase first. Passwords are encrypted with it; share it only with your employee. If you lose it, saved passwords cannot be recovered.</div><div class="fgrid"><div><label for="vp1">New passphrase (min 10 characters)</label><input id="vp1" type="password"></div><div><label for="vp2">Repeat</label><input id="vp2" type="password"></div><div style="align-self:end"><button class="btn p" data-a="vaultSet">Set passphrase</button></div></div>':'<div class="note warn">The owner has not set up the vault yet.</div>';
+  else top=S.vaultKey?'<div class="note ok">Vault unlocked for this session.</div><button class="btn" data-a="vaultLock">Lock</button>':'<div class="fgrid"><div><label for="vu">Vault passphrase</label><input id="vu" type="password"></div><div style="align-self:end"><button class="btn p" data-a="vaultUnlock">Unlock</button></div></div>';
+  return '<h1>Client portal logins</h1><div class="card">'+top+'<span class="muted">Master account: '+esc(DB.settings.master)+'. Every reveal and copy goes into the activity log.</span></div>'+
+  '<div class="card" style="padding:0"><div class="tbl"><table><thead><tr><th>Client</th><th>User ID</th><th>Password</th><th></th></tr></thead><tbody>'+DB.clients.map(c=>'<tr><td>'+esc(c.f.name)+'</td><td class="mono">'+(c.cred?esc(c.cred.user):'—')+'</td><td class="mono">'+(c.cred?(S.reveal[c.id]?esc(S.reveal[c.id]):'••••••••••'):'—')+'</td><td><div class="row">'+(c.cred?'<button class="btn" data-a="reveal" data-v="'+c.id+'">'+(S.reveal[c.id]?'Hide':'Reveal · logged')+'</button><button class="btn" data-a="copyPass" data-v="'+c.id+'">Copy · logged</button>':'')+'<button class="btn" data-a="editCred" data-v="'+c.id+'">'+(c.cred?'Change':'Add')+'</button></div></td></tr>').join('')+'</tbody></table></div></div>';
+}
+function teamView(){
+  return '<h1>Team access</h1><div class="card"><span class="muted">Employees sign in to the Income Tax console with the Gmail registered here. Switch access off and they are locked out at once. Approvals, settings, backup and the activity log stay owner-only.</span>'+DB.team.map((t,i)=>'<div style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px"><div class="row between"><div><div style="font-weight:500">'+esc(t.name)+'</div><div class="muted">'+esc(t.email)+'</div></div><div class="row">'+pill('Preparer','Filed')+'<button class="btn r" data-a="rmTeam" data-v="'+i+'">Remove</button></div></div><label style="display:flex;gap:8px;align-items:center;margin:0;font-size:13px;color:#111827"><input type="checkbox" style="width:auto" data-a="active" data-v="'+i+'"'+(t.active?' checked':'')+'>Access to Income Tax console '+(t.active?'(on)':'(off)')+'</label></div></div>').join('')+
+  '<div class="fgrid"><div><label for="tn">Name</label><input id="tn"></div><div><label for="te">Gmail</label><input id="te" type="email" placeholder="name@gmail.com"></div><div style="align-self:end"><button class="btn d" data-a="addTeam">Give access</button></div></div>'+
+  '<div class="note info"><b>Preparer can:</b> see all clients and portal logins (logged), import prefill, prepare and send computations, record payments, request fee changes, generate JSON after the gate, mark filed.<br><b>Preparer cannot:</b> approve fee changes, verify GPay payments, delete clients, change settings or export the backup.</div>'+
+  '<span class="muted">'+(LIVE?'They sign in at tax.nisnil.co.in with “Sign in with Google” using this Gmail.':'Demo: use the “Employee” switch at the top.')+'</span></div>';
+}
+function empSignIn(){
+  return '<div class="card" style="max-width:420px"><h1>Employee sign-in</h1><span class="muted">Sign in with the Gmail the owner registered in Team access.</span><label for="em">Gmail</label><input id="em" type="email" placeholder="name@gmail.com"><button class="btn p" data-a="empLogin">Sign in with Google (test)</button><span class="muted">Test build: type the Gmail. Live version: Google sign-in button. Sample employee: preparer1@gmail.com</span></div>';
+}
+function qrView(){
+  const s=DB.settings;
+  return '<h1>Payment QR &amp; UPI</h1><div class="card"><span class="muted">Upload the UPI QR code customers scan to pay. It shows on every client\'s payment step. Owner and employees can update it; every change is logged.</span>'+
+  (s.qr?'<img src="'+s.qr+'" alt="Payment QR code" style="width:220px;height:220px;object-fit:contain;border:1px solid #E5E7EB;border-radius:10px;background:#fff">':'<div class="note warn">No QR uploaded yet.</div>')+
+  '<label for="qrf">Upload QR image (PNG or JPG, under 400 KB)</label><input id="qrf" type="file" accept="image/png,image/jpeg,image/webp" data-a="qrUp">'+
+  '<div class="fgrid"><div><label for="upi">UPI ID shown under the QR</label><input id="upi" value="'+esc(s.upi||'')+'" placeholder="name@bank"></div><div><label for="qrn">Note for customers</label><input id="qrn" value="'+esc(s.qrNote||'')+'" placeholder="Account name: Nisnil ..."></div><div style="align-self:end"><button class="btn p" data-a="saveUpi">Save</button></div></div>'+
+  (s.qr?'<button class="btn r" data-a="rmQr">Remove QR</button>':'')+'</div>'+
+  '<div class="card"><h2>Razorpay links</h2><span class="muted">Create a payment link in your Razorpay dashboard, then paste it on the client\'s page (Payment gate). Only the owner can add links. The client sees a “Pay with Razorpay” button.</span></div>';
+}
+function logView(){return '<h1>Activity log</h1><div class="card">'+DB.log.map(l=>'<div class="row" style="gap:14px;border-bottom:1px solid #F1F2F4;padding:6px 0"><span class="muted" style="min-width:120px">'+esc(l.t)+'</span><span style="min-width:90px;font-weight:500">'+esc(l.who)+'</span><span>'+esc(l.x)+'</span></div>').join('')+'</div>'}
+function settingsView(){
+  const f=DB.settings.fees;
+  return '<h1>Settings &amp; backup</h1><div class="card"><h2>Standard fees</h2><div class="fgrid">'+Object.keys(f).map(k=>'<div><label for="fee_'+k+'">'+k+'</label><input id="fee_'+k+'" data-fee="'+k+'" inputmode="numeric" value="'+f[k]+'"></div>').join('')+'</div><div class="fgrid"><div><label for="ayS">Assessment year</label><select id="ayS"><option'+(DB.settings.ay==='AY 2027-28'?' selected':'')+'>AY 2027-28</option><option'+(DB.settings.ay==='AY 2026-27'?' selected':'')+'>AY 2026-27</option></select></div><div><label for="mst">Master account</label><input id="mst" value="'+esc(DB.settings.master)+'"></div></div><div class="row"><button class="btn p" data-a="saveSettings">Save settings</button></div></div>'+
+  '<div class="card"><h2>Backup</h2><span class="muted">'+(LIVE?'Live data is saved in Google Drive › Nisnil Tax, with a daily copy in Backups. You can also copy a backup here.':'Demo data stays only in this browser. Copy the backup and keep it safe.')+' Passwords stay encrypted inside it.</span><div class="row"><button class="btn" data-a="backup">Show backup</button><button class="btn" data-a="restore">Restore from backup</button><button class="btn r" data-a="reset">Reset to sample data</button></div></div>';
+}
+
+/* ---------- client portal ---------- */
+function clientView(){
+  if(LIVE&&!DB.clients.length)return '<div class="card"><h1>Start your ITR</h1><span class="muted">Welcome! Tell us who you are and we will open your income tax return file. You can upload documents and fill details now, and pay later.</span><div><label for="rgn">Full name (as on PAN)</label><input id="rgn"></div><div><label for="rgp">Mobile</label><input id="rgp" inputmode="tel"></div><button class="btn p" data-a="register">Start my ITR</button></div>';
+  if(!S.clientAs||!C(S.clientAs))S.clientAs=DB.clients[0]&&DB.clients[0].id;
+  const c=C(S.clientAs);
+  const pick=LIVE?(DB.clients.length>1?'<div class="card"><label for="cas">Return for</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+'</option>').join('')+'</select></div>':''):'<div class="card"><label for="cas">Signed in as (test: pick a client)</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+' · '+esc(x.f.email)+'</option>').join('')+'</select><span class="muted">Live version: “Sign in with Google”.</span></div>';
+  if(!c)return pick;
+  const s=status(c);
+  const B=c.comp;
+  return pick+'<h1>Your ITR · '+esc(DB.settings.ay)+'</h1><div>'+pill(s==='Sent to client'?'Please review your computation':s,s==='Sent to client'?'Computation ready':s)+'</div>'+
+  '<div class="card"><h2>1. Upload your documents</h2>'+(c.docs.length?c.docs.map(d=>docRow(c,d)).join(''):'<span class="muted">Form 16, bank interest certificates, investment proofs, capital gains statements.</span>')+'<label for="cup">Add files</label><input id="cup" type="file" multiple data-a="upload" data-v="'+c.id+'"></div>'+
+  '<div class="card"><h2>2. Fill your details</h2><span class="muted">Optional: fill what you know and we will check it. If you prefer, just upload documents and our team fills this for you. No payment needed for this step.</span>'+
+   (c.f.filledBy?'<div class="note ok">Last updated by '+esc(c.f.filledBy)+'</div>':'')+
+   '<div class="fgrid">'+[['salary','Gross salary (Form 16)'],['savingsInt','Savings bank interest'],['fdInt','FD / RD interest'],['hpInterest','Home-loan interest'],['ltcg112A','Gain on shares / equity MF held over 1 year'],['stcg111A','Gain on shares / equity MF held under 1 year'],['d80C','80C investments (PPF, ELSS, LIC, PF)'],['d80D','Health insurance premium'],['tds','TDS (Form 16 / 26AS)']].map(([k,l])=>'<div><label for="cf_'+k+'">'+l+'</label><input id="cf_'+k+'" data-cf="'+k+'" inputmode="numeric" value="'+(N(c.f[k])||'')+'"></div>').join('')+
+   '<div><label for="cf_phone">Mobile</label><input id="cf_phone" data-cf="phone" value="'+esc(c.f.phone)+'"></div></div>'+
+   '<label for="cf_notes">Anything else we should know? (foreign assets, property sale, business income)</label><textarea id="cf_notes" data-cf="notes" rows="2">'+esc(c.f.notes||'')+'</textarea>'+
+   '<button class="btn p" data-a="cDetails" data-v="'+c.id+'">Save my details</button></div>'+
+  '<div class="card"><h2>3. Check your computation</h2>'+(c.sent&&B?
+   '<div class="grid"><div class="kpi"><span class="muted">Regime</span><b style="font-size:18px">'+(B.regime==='new'?'New':'Old')+' regime</b></div><div class="kpi"><span class="muted">'+(B.net<0?'Expected refund':'Tax to pay')+'</span><b style="font-size:18px">'+INR(Math.abs(B.net))+'</b></div></div><button class="btn" data-a="viewComp" data-v="'+c.id+'">View full computation</button>'+
+   (c.approval==='none'?'<label for="rr">Something wrong? Tell us (needed only to reject)</label><textarea id="rr" rows="2"></textarea><div class="row"><button class="btn r" data-a="cReject" data-v="'+c.id+'">Reject</button><button class="btn p" data-a="cApprove" data-v="'+c.id+'">Approve</button></div>':c.approval==='approved'?'<div class="note ok">You approved this computation.</div>':'<div class="note bad">You rejected it. We are revising it.</div>')
+   :'<span class="muted">Your computation will appear here once it is ready.</span>')+'</div>'+
+  '<div class="card"><h2>4. Pay to file</h2><div class="row between"><span>'+esc(c.f.itr)+' filing fee</span><b style="font-size:18px">'+INR(c.fee)+'</b></div>'+
+   (cleared(c)?'<div>'+payLabel(c)+'</div>':c.pay.state==='verifying'?'<div class="note info">We received your payment reference and are confirming it.</div>':
+   '<span class="muted">You can pay now or after approving your computation. We file only after payment is confirmed.</span>'+
+   (c.payLink?'<a class="btn p" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="'+esc(c.payLink)+'" target="_blank" rel="noopener">Pay '+INR(c.fee)+' with Razorpay</a>':'')+
+   (DB.settings.qr?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid #E5E7EB;border-radius:10px;padding:12px"><img src="'+DB.settings.qr+'" alt="UPI QR code to pay Nisnil Tax" style="width:200px;height:200px;object-fit:contain"><span class="muted">Scan with any UPI app'+(DB.settings.upi?' · '+esc(DB.settings.upi):'')+'</span>'+(DB.settings.qrNote?'<span class="muted">'+esc(DB.settings.qrNote)+'</span>':'')+'</div>':'')+
+   (!c.payLink&&!DB.settings.qr?'<div class="note warn">Payment options will appear here shortly.</div>':'')+
+   '<div class="fgrid"><div><label for="cutr">After paying, enter UTR / payment ID</label><input id="cutr"></div><div style="align-self:end"><button class="btn" data-a="cPayRef" data-v="'+c.id+'">I have paid</button></div></div>')+'</div>'+
+  '<div class="card"><h2>5. Your filed documents</h2>'+(c.delivered?'<div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>ITR-V acknowledgement'+(c.filed?' · '+esc(c.filed.ack):'')+'</span>'+(LIVE&&c.itrv&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Download</button>':'<span class="muted">'+esc(itrvName(c)||'ITR-V.pdf')+'</span>')+'</div><div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>Computation</span><button class="btn" data-a="viewComp" data-v="'+c.id+'">View</button></div><span class="muted">Keep a copy on your phone or Google Drive.</span>':c.filed?'<div class="note info">Filed. You will get an Aadhaar OTP from the Income Tax Department: share it with us to e-verify.</div>':'<span class="muted">Your ITR-V and computation appear here after filing.</span>')+'</div>';
+}
+
+/* ---------- modals ---------- */
+function modal(html){layer.innerHTML='<div class="modal" data-a="closeBg"><div class="card" role="dialog" aria-modal="true">'+html+'</div></div>'}
+function closeModal(){layer.innerHTML=''}
+function compSheet(c){
+  const r=c.comp||(b0=>b0.best==='new'?b0.n:b0.o)(both(c.f));
+  const L=(l,v,b)=>'<tr><td'+(b?' style="font-weight:600"':'')+'>'+l+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+INR(v)+'</td></tr>';
+  return '<div class="row between"><h2>Computation of total income · '+esc(DB.settings.ay)+'</h2><button class="btn" data-a="close">Close</button></div><div class="muted">'+esc(c.f.name)+' · PAN '+esc(c.f.pan)+' · '+esc(c.f.itr)+' · '+(r.regime==='new'?'New':'Old')+' regime</div><div class="tbl"><table><tbody>'+
+  L('Income from salary',r.salInc)+L('House property',r.hp)+L('Other sources',r.oth)+L('Business (presumptive)',r.biz)+L('Capital gains',r.stO+r.special)+L('Gross total income',r.gti,1)+L('Less: deductions',-r.ded)+L('Total income',r.total,1)+L('Tax on total income',r.taxN+r.taxS)+L('Less: rebate / relief',-(r.reb+r.mr))+L('Surcharge',r.surch)+L('Cess 4%',r.cess)+L('Total tax liability',r.liab,1)+L('Less: TDS / taxes paid',-r.paid)+L(r.net<0?'Refund due':'Tax payable',Math.abs(r.net),1)+
+  '</tbody></table></div><span class="muted">Prepared by Nisnil Tax</span>';
+}
+function credForm(c){
+  if(!DB.settings.vault||!S.vaultKey)return '<div class="row between"><h2>Portal login</h2><button class="btn" data-a="close">Close</button></div><div class="note warn">Unlock the vault first (Client logins page).</div><button class="btn p" data-a="goVault">Go to Client logins</button>';
+  return '<div class="row between"><h2>Portal login · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="fgrid"><div><label for="cu">User ID (PAN)</label><input id="cu" value="'+esc(c.cred?c.cred.user:c.f.pan)+'"></div><div><label for="cp">Password</label><input id="cp" type="password"></div></div><button class="btn p" data-a="saveCred" data-v="'+c.id+'">Save encrypted</button>';
+}
+
+/* ---------- prefill parser (best effort) ---------- */
+function walk(o,fn,path){if(o&&typeof o==='object'){for(const k in o){const v=o[k];fn(k,v,path);walk(v,fn,(path||'')+'.'+k)}}}
+function parsePrefill(j){
+  const found={};const take=(name,v)=>{if(found[name]==null&&v!=null&&v!=='')found[name]=v};
+  walk(j,(k,v)=>{
+    const K=k.toLowerCase();
+    if(typeof v==='object')return;
+    if(K==='pan'||K==='assesseepan')take('pan',String(v).toUpperCase());
+    else if(K==='firstname')take('first',v);
+    else if(K==='surnameororgname'||K==='lastname')take('last',v);
+    else if(K==='dob'||K==='dateofbirth')take('dob',v);
+    else if(K==='emailaddress'||K==='email')take('email',v);
+    else if(K==='grosssalary'||K==='totalgrosssalary')take('salary',N(v));
+    else if(K.includes('intrstfrmsavingbank')||K.includes('interestfromsaving')||K==='savingsbankinterest')take('savingsInt',N(v));
+    else if(K.includes('intrstfrmtermdeposit')||K.includes('interestfromdeposit'))take('fdInt',N(v));
+    else if(K==='totaltdsonsalaries'||K==='totaltaxdeducted'||K==='totaltds'||K==='tdsonsalary')take('tds',N(v));
+    else if(K==='dividendincome'||K==='dividend')take('dividend',N(v));
+  });
+  return found;
+}
+
+/* ---------- events ---------- */
+function save(){persist();render();if(LIVE)liveSave()}
+function readF(c){document.querySelectorAll('[data-f]').forEach(el=>{const k=el.dataset.f;c.f[k]=(el.tagName==='SELECT'||el.type==='text'||el.type==='email')?el.value.trim():N(el.value)});if(c.f.pan)c.f.pan=c.f.pan.toUpperCase()}
+const val=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
+async function copy(t){try{await navigator.clipboard.writeText(t);toast('Copied')}catch(e){toast('Copy blocked by the browser')}}
+
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-a]');if(!el)return;
+  const a=el.dataset.a,v=el.dataset.v;
+  if(el.tagName==='INPUT'&&el.type==='file')return;
+  if(el.tagName==='SELECT')return;
+  if(a==='closeBg'){if(e.target===el)closeModal();return}
+  const c=v?C(v):null;
+  switch(a){
+    case 'gsignin':try{await signIn();apply(await api('load'))}catch(err){toast(err.message)}break;
+    case 'signout':signOut();break;
+    case 'openFile':openFile(v,el.dataset.fid);break;
+    case 'register':{const n=val('rgn'),ph=val('rgp');if(n.length<3){toast('Enter your full name');break}try{apply(await api('register',{name:n,phone:ph}))}catch(err){toast(err.message)}break}
+    case 'role':if(LIVE)break;S.role=v;S.view=v==='owner'?'dash':'queue';S.cur=null;S.reveal={};S.emp=null;S.vaultKey=null;render();break;
+    case 'empLogin':{const em=val('em').toLowerCase();const t=DB.team.find(x=>x.email.toLowerCase()===em);if(!t){toast('This Gmail is not registered. Ask the owner.');break}if(!t.active){toast('Access is switched off for this Gmail.');break}S.emp=em;log('Signed in',t.name);persist();render();break}
+    case 'saveLink':{if(S.role!=='owner')break;const l=val('plink');if(l&&!/^https:\/\/\S+$/.test(l)){toast('Paste a full https:// Razorpay link');break}c.payLink=l;log((l?'Saved':'Removed')+' Razorpay link for '+c.f.name);save();toast('Link saved: client sees a Pay button');break}
+    case 'copyLink':copy('Namaste '+c.f.name+', your '+c.f.itr+' filing fee is '+INR(c.fee)+'. Pay here: '+c.payLink+' . Thank you, Nisnil Tax');break;
+    case 'payRec':{const m=val('pm'),u=val('utr');if(m!=='Cash at office'&&!/^[\w-]{6,30}$/.test(u)){toast('Enter the UTR or Razorpay payment ID');break}c.pay={state:S.role==='owner'?'paid':'verifying',method:m,utr:u};log((S.role==='owner'?'Recorded and verified ':'Recorded (owner to verify) ')+m+' payment for '+c.f.name);save();break}
+    case 'cDetails':{document.querySelectorAll('[data-cf]').forEach(el=>{const k=el.dataset.cf;c.f[k]=(k==='phone'||k==='notes')?el.value.trim():N(el.value)});c.f.filledBy='Client ('+now()+')';if(c.comp&&c.approval!=='approved'){c.comp=null;c.sent=false}log('Client updated their details','Client · '+c.f.name);save();toast('Saved. Our team will check and prepare your computation.');break}
+    case 'cPayRef':{const u=val('cutr');if(!/^[\w-]{6,30}$/.test(u)){toast('Enter the UTR or payment ID from your payment');break}c.pay={state:'verifying',method:/^pay_/i.test(u)?'Razorpay link':'UPI QR',utr:u};log('Client reported payment '+u,'Client · '+c.f.name);save();break}
+    case 'saveUpi':DB.settings.upi=val('upi');DB.settings.qrNote=val('qrn');log('Updated UPI details');save();toast('Saved');break;
+    case 'rmQr':DB.settings.qr=null;log('Removed payment QR');save();break;
+    case 'nav':S.view=v;S.cur=null;render();break;
+    case 'tab':S.tab=v;render();break;
+    case 'open':S.cur=v;S.view='job';render();window.scrollTo(0,0);break;
+    case 'newClient':{const f=Object.assign({},DB.clients[0]?DB.clients[0].f:{});Object.keys(f).forEach(k=>f[k]=typeof f[k]==='number'?0:'');Object.assign(f,{age:'below60',hpType:'none',itr:'ITR-1',name:'New client',pan:''});const n={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees['ITR-1'],feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'};DB.clients.unshift(n);log('Created client');S.cur=n.id;S.view='job';save();break}
+    case 'delClient':if(S.role!=='owner')break;modal('<h2>Delete '+esc(c.f.name)+'?</h2><p>This removes the client and their saved login from this console.</p><div class="row"><button class="btn r" data-a="delYes" data-v="'+c.id+'">Delete</button><button class="btn" data-a="close">Cancel</button></div>');break;
+    case 'delYes':DB.clients=DB.clients.filter(x=>x.id!==v);log('Deleted client '+c.f.name);closeModal();S.view='queue';S.cur=null;save();break;
+    case 'close':closeModal();break;
+    case 'saveComp':{readF(c);c.f.filledBy=(S.role==='owner'?'Owner':empName())+' ('+now()+')';const B=both(c.f);c.comp=Object.assign({},B.best==='new'?B.n:B.o);if(!c.feeReq||c.feeReq.state!=='approved')c.fee=DB.settings.fees[c.f.itr]||c.fee;if(c.approval!=='none'||c.sent){if(c.approval==='approved')log('Computation changed after approval: approval reset for '+c.f.name);c.approval='none';c.sent=false}log('Computed '+c.f.name+' ('+B.best+' regime, '+INR(c.comp.net)+')');save();toast('Saved and computed');break}
+    case 'send':if(!c.comp)break;c.sent=true;c.approval='none';c.reason='';log('Sent computation to '+c.f.name);save();toast('Sent to client portal');break;
+    case 'viewComp':modal(compSheet(c));break;
+    case 'markPaid':c.pay={state:'paid',method:'Razorpay',utr:''};log('Recorded Razorpay payment '+INR(c.fee)+' for '+c.f.name);save();break;
+    case 'gpay':{const u=val('utr');if(!/^\w{8,22}$/.test(u)){toast('Enter a valid UTR');break}c.pay={state:S.role==='owner'?'paid':'verifying',method:'GPay',utr:u};log((S.role==='owner'?'Recorded and verified':'Entered')+' GPay UTR for '+c.f.name);save();break}
+    case 'feeReq':{const t=val('frt'),amt=N(val('fra')),r=val('frr');if(!r){toast('Add a reason');break}if(t==='Discount'&&!(amt>0&&amt<c.fee)){toast('Enter a discounted amount below the current fee');break}
+      c.feeReq={type:t,amount:t==='Free filing'?0:amt,reason:r,state:'pending'};
+      if(S.role==='owner'){applyFee(c);}else log('Requested fee change ('+t+') for '+c.f.name);save();break}
+    case 'frYes':applyFee(c);save();break;
+    case 'frNo':c.feeReq.state='rejected';log('Rejected fee request for '+c.f.name);save();break;
+    case 'gpYes':c.pay.state='paid';log('Verified GPay UTR '+c.pay.utr+' for '+c.f.name);save();break;
+    case 'gpNo':c.pay={state:'unpaid',method:'',utr:''};log('GPay UTR not found for '+c.f.name);save();break;
+    case 'genJson':{if(!(c.approval==='approved'&&cleared(c)))break;const r=c.comp;const out={_note:'DRAFT internal format from Nisnil Income Tax console. NOT for upload to the e-filing portal until the official schema is mapped.',assessmentYear:DB.settings.ay,form:c.f.itr,pan:c.f.pan,name:c.f.name,regime:r.regime,income:{salary:r.salInc,houseProperty:r.hp,otherSources:r.oth,business:r.biz,capitalGainsSlab:r.stO,capitalGainsSpecial:{s111A:r.s111,s112A:r.l112,otherLTCG:r.lO}},grossTotalIncome:r.gti,deductions:r.ded,totalIncome:r.total,tax:{slab:Math.round(r.taxN),special:Math.round(r.taxS),rebate87A:Math.round(r.reb),marginalRelief:Math.round(r.mr),surcharge:Math.round(r.surch),cess:Math.round(r.cess),liability:r.liab},taxesPaid:r.paid,payableOrRefund:r.net,inputs:c.f};
+      const txt=JSON.stringify(out,null,2);log('Generated draft JSON for '+c.f.name);persist();
+      modal('<div class="row between"><h2>Draft JSON · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="note warn">Draft for checking only. Not in the official portal schema yet.</div><textarea class="code" readonly id="jt">'+esc(txt)+'</textarea><div class="row"><button class="btn" data-a="copyTxt">Copy</button>'+'<button class="btn p" data-a="dlJson" data-v="'+c.id+'">Download .json</button>'+'</div>');break}
+    case 'copyTxt':copy(document.getElementById('jt').value);break;
+    case 'dlJson':try{saveBlob(c.f.pan+'_'+DB.settings.ay.replace(/\s/g,'')+'_draft.json',new Blob([document.getElementById('jt').value],{type:'application/json'}))}catch(err){toast('Download blocked here: use Copy')}break;
+    case 'markFiled':{const ack=val('ack');if(!/^\d{8,20}$/.test(ack)){toast('Enter the acknowledgement number (digits)');break}c.filed={ack,d:now()};log('Marked filed, ack '+ack+', for '+c.f.name);save();break}
+    case 'everify':c.everified=true;log('E-verified return of '+c.f.name);save();break;
+    case 'deliver':c.delivered=true;log('Delivered ITR-V and computation to '+c.f.name);save();toast('Delivered to client portal');break;
+    case 'cApprove':c.approval='approved';log('Client approved computation','Client · '+c.f.name);save();break;
+    case 'cReject':{const r=val('rr');if(!r){toast('Tell us what is wrong first');break}c.approval='rejected';c.reason=r;log('Client rejected: '+r,'Client · '+c.f.name);save();break}
+    case 'cPay':c.pay={state:'paid',method:'Razorpay',utr:''};log('Client paid '+INR(c.fee)+' via Razorpay (test)','Client · '+c.f.name);save();break;
+    case 'cGpay':{const u=val('cutr');if(!/^\w{8,22}$/.test(u)){toast('Enter a valid UTR');break}c.pay={state:'verifying',method:'GPay',utr:u};log('Client sent GPay UTR','Client · '+c.f.name);save();break}
+    case 'editCred':modal(credForm(c));break;
+    case 'goVault':closeModal();S.view='vault';S.cur=null;render();break;
+    case 'saveCred':{const u=val('cu'),p=document.getElementById('cp').value;if(!u||!p){toast('Enter user ID and password');break}try{const o=await encStr(S.vaultKey,p);c.cred={user:u,iv:o.iv,ct:o.ct};delete S.reveal[c.id];log('Saved portal login for '+c.f.name);closeModal();save()}catch(err){toast('Encryption failed in this browser')}break}
+    case 'reveal':case 'copyPass':{if(S.reveal[c.id]&&a==='reveal'){delete S.reveal[c.id];render();break}if(!S.vaultKey){toast('Unlock the vault first (Client logins)');break}try{const p=await decStr(S.vaultKey,c.cred);log((a==='reveal'?'Revealed':'Copied')+' portal password of '+c.f.name);persist();if(a==='reveal'){S.reveal[c.id]=p;render();setTimeout(()=>{delete S.reveal[c.id];render()},15000)}else copy(p)}catch(err){toast('Could not decrypt: wrong passphrase?')}break}
+    case 'vaultSet':{const p1=document.getElementById('vp1').value,p2=document.getElementById('vp2').value;if(p1.length<10){toast('Use at least 10 characters');break}if(p1!==p2){toast('Passphrases do not match');break}try{const salt=crypto.getRandomValues(new Uint8Array(16));const k=await deriveKey(p1,salt);const chk=await encStr(k,'nisnil-ok');DB.settings.vault={salt:b64(salt),chk};S.vaultKey=k;log('Vault passphrase set');save()}catch(err){toast('This browser blocked encryption')}break}
+    case 'vaultUnlock':{const p=document.getElementById('vu').value;try{const k=await deriveKey(p,ub64(DB.settings.vault.salt));const t=await decStr(k,DB.settings.vault.chk);if(t!=='nisnil-ok')throw 0;S.vaultKey=k;log('Vault unlocked');save()}catch(err){toast('Wrong passphrase')}break}
+    case 'vaultLock':S.vaultKey=null;S.reveal={};render();break;
+    case 'addTeam':{const n=val('tn'),em=val('te');if(!n||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){toast('Enter a name and a valid Gmail');break}DB.team.push({name:n,email:em,active:true});log('Gave access to '+em);save();break}
+    case 'rmTeam':{const t=DB.team[+v];DB.team.splice(+v,1);log('Removed access for '+(t?t.email:''));save();break}
+    case 'saveSettings':document.querySelectorAll('[data-fee]').forEach(i=>DB.settings.fees[i.dataset.fee]=N(i.value));DB.settings.ay=val('ayS');DB.settings.master=val('mst')||DB.settings.master;log('Settings saved');save();toast('Settings saved');break;
+    case 'backup':if(S.role!=='owner')break;modal('<div class="row between"><h2>Backup</h2><button class="btn" data-a="close">Close</button></div><textarea class="code" readonly id="jt">'+esc(JSON.stringify(DB))+'</textarea><div class="row"><button class="btn p" data-a="copyTxt">Copy backup</button></div>');log('Opened backup');persist();break;
+    case 'restore':if(LIVE){toast('Live data is backed up daily to Drive › Nisnil Tax › Backups');break}modal('<div class="row between"><h2>Restore from backup</h2><button class="btn" data-a="close">Close</button></div><label for="rs">Paste backup text</label><textarea class="code" id="rs"></textarea><button class="btn p" data-a="restoreYes">Restore</button>');break;
+    case 'restoreYes':try{const d=JSON.parse(document.getElementById('rs').value);if(!d.clients||!d.settings)throw 0;DB=d;S.vaultKey=null;closeModal();log('Restored from backup');save();toast('Restored')}catch(err){toast('That is not a valid backup')}break;
+    case 'reset':if(LIVE){toast('Not available on the live console');break}modal('<h2>Reset to sample data?</h2><p>Everything in this browser is replaced with the sample clients.</p><div class="row"><button class="btn r" data-a="resetYes">Reset</button><button class="btn" data-a="close">Cancel</button></div>');break;
+    case 'resetYes':DB=seed();S.vaultKey=null;S.reveal={};closeModal();S.view='dash';save();break;
+  }
+});
+function applyFee(c){const r=c.feeReq;r.state='approved';if(r.type==='Free filing'){c.fee=0}else if(r.type==='Discount'){c.fee=r.amount}else if(r.type==='Pay after filing'){c.credit=true}log('Approved fee change ('+r.type+') for '+c.f.name,'Owner')}
+
+document.addEventListener('change',async e=>{
+  const el=e.target;const a=el.dataset.a,v=el.dataset.v;const c=v?C(v):null;
+  if(a==='clientAs'){S.clientAs=el.value;render();return}
+  if(a==='active'){const t=DB.team[+v];if(t){t.active=el.checked;log((el.checked?'Switched on':'Switched off')+' access for '+t.email,'Owner');save()}return}
+  if(a==='qrUp'&&el.files[0]){const f=el.files[0];if(f.size>400*1024){toast('Image too large: keep it under 400 KB');return}const rd=new FileReader();rd.onload=()=>{DB.settings.qr=rd.result;log('Uploaded new payment QR');save();toast('QR uploaded: clients now see it')};rd.readAsDataURL(f);return}
+  if(a==='upload'&&c){if(LIVE){uploadFiles(c,[...el.files],'doc');return}[...el.files].forEach(f=>c.docs.push({n:f.name,d:now()}));log('Uploaded '+el.files.length+' file(s) for '+c.f.name,S.role==='client'?'Client · '+c.f.name:undefined);save();toast('Uploaded (demo stores file names only)');return}
+  if(a==='itrv'&&c&&el.files[0]){if(LIVE){uploadFiles(c,[el.files[0]],'itrv');return}c.itrv=el.files[0].name;log('Attached ITR-V for '+c.f.name);save();return}
+  if(a==='prefill'&&c&&el.files[0]){
+    try{const txt=await el.files[0].text();const j=JSON.parse(txt);const g=parsePrefill(j);
+      readF(c);
+      if(g.pan)c.f.pan=g.pan;if(g.first||g.last)c.f.name=[g.first,g.last].filter(Boolean).join(' ');if(g.email)c.f.email=g.email;
+      ['salary','savingsInt','fdInt','tds','dividend'].forEach(k=>{if(g[k]!=null)c.f[k]=g[k]});
+      if(g.dob){const y=parseInt(String(g.dob).slice(0,4))||parseInt(String(g.dob).slice(-4));if(y){const age=2027-y;c.f.age=age>=80?'80plus':age>=60?'60to79':'below60'}}
+      const keys=Object.keys(g);c.prefill=true;c.prefillInfo=keys.length?'found '+keys.join(', '):'file read, but no known fields matched: enter figures manually';
+      log('Imported prefill JSON for '+c.f.name+' ('+keys.length+' fields)');save();toast(keys.length?'Prefill imported: check the figures':'No known fields found');
+    }catch(err){toast('Not a valid JSON file')}
+  }
+});
+document.addEventListener('input',e=>{if(e.target.dataset.i==='q'){S.q=e.target.value;const pos=e.target.selectionStart;render();const q=document.getElementById('q');if(q){q.focus();q.setSelectionRange(pos,pos)}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&layer.innerHTML)closeModal()});
+boot();
+})();
+</script>
+</body>
+</html>
