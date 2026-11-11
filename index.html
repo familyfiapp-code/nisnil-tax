@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nisnil Income Tax</title>
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="img/nisnil.png">
+<link rel="apple-touch-icon" href="img/nisnil.png">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="config.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -18,7 +20,7 @@ input,select,textarea{font:inherit;font-size:14px;padding:8px 10px;border:1px so
 label{font-size:12px;color:#4B5563;display:block;margin-bottom:4px}
 .top{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 24px;background:#fff;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:5}
 .brand{display:flex;gap:10px;align-items:center}
-.logo{width:32px;height:32px;border-radius:8px;background:#0F766E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.logo{width:32px;height:32px;border-radius:8px;display:block}
 .seg{display:flex;border:1px solid #D1D5DB;border-radius:999px;overflow:hidden}
 .seg button{border:0;background:#fff;padding:8px 14px;font-size:13px;color:#374151}
 .seg button.on{background:#111827;color:#fff}
@@ -273,7 +275,7 @@ async function decStr(key,o){const pt=await crypto.subtle.decrypt({name:'AES-GCM
 const app=document.getElementById('app'),layer=document.getElementById('layer');
 function signInView(){
   const err=LIVE?'':'<div class="note warn">Demo mode: TAX_API is not set in config.js.</div>';
-  return '<div style="max-width:440px;margin:60px auto;padding:0 16px"><div class="card" style="gap:14px;text-align:left"><div class="brand"><div class="logo">N</div><div><div style="font-weight:600;font-size:17px">Nisnil Income Tax</div><div class="muted">ITR filing for individuals</div></div></div>'+err+
+  return '<div style="max-width:440px;margin:60px auto;padding:0 16px"><div class="card" style="gap:14px;text-align:left"><div class="brand"><img class="logo" src="img/nisnil.png" alt="Nisnil" width="32" height="32"><div><div style="font-weight:600;font-size:17px">Nisnil Income Tax</div><div class="muted">ITR filing for individuals</div></div></div>'+err+
   '<h1 style="font-size:19px">Sign in to file your income tax return</h1><span class="muted">Customers: sign in with your Google account to upload documents, check your computation and pay. Nisnil team members: sign in with the Gmail the owner registered.</span>'+
   '<button class="btn p" style="height:44px;font-size:15px" data-a="gsignin">Sign in with Google</button><span class="muted">By signing in you agree that Nisnil uses your details only to prepare and file your return. <a href="https://nisnil.co.in/">nisnil.co.in</a></span></div></div>';
 }
@@ -288,7 +290,7 @@ function render(){
   if(r==='employee'&&!me){S.emp=null;navItems=[]}
   const body=r==='employee'&&!me?empSignIn():r==='client'?clientView():S.view==='job'&&S.cur?jobView(C(S.cur)):r==='owner'&&S.view==='dash'?dashView():S.view==='approvals'&&r==='owner'?approvalsView():S.view==='payqr'?qrView():S.view==='vault'?vaultView():S.view==='team'&&r==='owner'?teamView():S.view==='log'&&r==='owner'?logView():S.view==='settings'&&r==='owner'?settingsView():queueView();
   app.innerHTML=
-  '<header class="top"><div class="brand"><div class="logo">N</div><div><div style="font-weight:600">'+(r==='client'?'Nisnil Tax':'Nisnil Income Tax')+'</div><div class="muted">'+(r==='client'?'Your income tax return':r==='owner'?'Income Tax console · Owner':'Income Tax console · '+(me?esc(me.name):'Employee sign-in'))+(LIVE?'':' · demo')+'</div></div></div>'+(LIVE?'<div class="row"><span class="muted">'+esc(S.me.email)+'</span><span id="busy" class="muted" style="display:none">Saving…</span><button class="btn" data-a="signout">Sign out</button></div></header>':'<div class="row"><span class="muted">View as</span><div class="seg" role="group" aria-label="Role"><button data-a="role" data-v="owner" class="'+(r==='owner'?'on':'')+'">Owner</button><button data-a="role" data-v="employee" class="'+(r==='employee'?'on':'')+'">Employee</button><button data-a="role" data-v="client" class="'+(r==='client'?'on':'')+'">Client</button></div></div></header>')+
+  '<header class="top"><div class="brand"><img class="logo" src="img/nisnil.png" alt="Nisnil" width="32" height="32"><div><div style="font-weight:600">'+(r==='client'?'Nisnil Tax':'Nisnil Income Tax')+'</div><div class="muted">'+(r==='client'?'Your income tax return':r==='owner'?'Income Tax console · Owner':'Income Tax console · '+(me?esc(me.name):'Employee sign-in'))+(LIVE?'':' · demo')+'</div></div></div>'+(LIVE?'<div class="row"><span class="muted">'+esc(S.me.email)+'</span><span id="busy" class="muted" style="display:none">Saving…</span><button class="btn" data-a="signout">Sign out</button></div></header>':'<div class="row"><span class="muted">View as</span><div class="seg" role="group" aria-label="Role"><button data-a="role" data-v="owner" class="'+(r==='owner'?'on':'')+'">Owner</button><button data-a="role" data-v="employee" class="'+(r==='employee'?'on':'')+'">Employee</button><button data-a="role" data-v="client" class="'+(r==='client'?'on':'')+'">Client</button></div></div></header>')+
   (r==='client'?'<main style="max-width:520px;margin:0 auto;width:100%">'+body+'</main>':
   '<div class="wrap"><nav aria-label="Main">'+navItems.map(([k,l])=>'<button data-a="nav" data-v="'+k+'" class="'+((S.view===k||(S.view==='job'&&k==='queue'))?'on':'')+'">'+l+'</button>').join('')+'</nav><main>'+body+'</main></div>');
 }
