@@ -207,6 +207,7 @@ function clientUpdate_(old, n) {
   });
   if (changed && c.comp && c.approval !== 'approved') { c.comp = null; c.sent = false; }
   if (old.sent && old.approval === 'none' && (n.approval === 'approved' || n.approval === 'rejected')) { c.approval = n.approval; c.reason = String(n.reason || '').slice(0, 300); }
+  if (old.delivered && n.driveSaved && typeof n.driveSaved === 'object') c.driveSaved = { d: String(n.driveSaved.d || '').slice(0, 40), link: /^https:\/\/drive\.google\.com\//.test(String(n.driveSaved.link || '')) ? String(n.driveSaved.link).slice(0, 300) : '' };
   if (old.pay.state !== 'paid' && n.pay && n.pay.state === 'verifying' && n.pay.utr) c.pay = { state: 'verifying', method: String(n.pay.method || 'UPI QR').slice(0, 30), utr: String(n.pay.utr).slice(0, 40) };
   return c;
 }

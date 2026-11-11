@@ -166,6 +166,25 @@ async function uploadFiles(c,files,kind){
     try{const b64=await fileB64(f);apply(await api('upload',{id:c.id,name:f.name,mime:f.type,b64,kind}))}catch(e){toast('Upload failed: '+e.message)}
   }
 }
+function driveToken(){return new Promise((res,rej)=>{try{const tc=google.accounts.oauth2.initTokenClient({client_id:CFG.CLIENT_ID,scope:'https://www.googleapis.com/auth/drive.file',callback:r=>r&&r.access_token?res(r.access_token):rej(new Error((r&&r.error)||'Drive permission was not given')),error_callback:()=>rej(new Error('The Google window was closed'))});tc.requestAccessToken({prompt:'',login_hint:S.me?S.me.email:''})}catch(e){rej(e)}})}
+async function driveCreate(tok,meta,blob){
+  let r;
+  if(blob){const fd=new FormData();fd.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));fd.append('file',blob);r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+tok},body:fd})}
+  else r=await fetch('https://www.googleapis.com/drive/v3/files?fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(meta)});
+  if(!r.ok)throw new Error('Google Drive refused the file ('+r.status+')');return r.json();
+}
+async function saveToDrive(c){
+  if(!LIVE){toast('Demo: Google Drive saving works on tax.nisnil.co.in');return}
+  const tok=await driveToken();
+  busy(true);
+  try{
+    const folder=await driveCreate(tok,{name:'Nisnil ITR – '+DB.settings.ay+' – '+c.f.name,mimeType:'application/vnd.google-apps.folder'});
+    if(c.itrv&&c.itrv.fid){const r=await api('getFile',{id:c.id,fid:c.itrv.fid});const bin=atob(r.b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);await driveCreate(tok,{name:r.name,parents:[folder.id]},new Blob([u],{type:r.mime||'application/pdf'}))}
+    const html='<html><head><meta charset="utf-8"></head><body style="font-family:Arial">'+compSheet(c,true).replace(/<button[^>]*>.*?<\/button>/g,'')+'<p>Acknowledgement: '+esc(c.filed?c.filed.ack:'')+'</p></body></html>';
+    await driveCreate(tok,{name:'Computation – '+c.f.name+' – '+DB.settings.ay,mimeType:'application/vnd.google-apps.document',parents:[folder.id]},new Blob([html],{type:'text/html'}));
+    c.driveSaved={d:now(),link:folder.webViewLink||''};log('Client saved ITR-V and computation to their Google Drive','Client · '+c.f.name);save();toast('Saved to your Google Drive');
+  }finally{busy(false)}
+}
 function saveBlob(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
 async function openFile(id,fid){
   try{const r=await api('getFile',{id,fid});const bin=atob(r.b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);saveBlob(r.name,new Blob([u],{type:r.mime}))}catch(e){toast('Could not open: '+e.message)}
@@ -242,6 +261,7 @@ function suggestITR(f){
 
 /* ---------- status ---------- */
 const FLOW=['New','Docs uploaded','Computation ready','Sent to client','Approved','Cleared to file','Filed','E-verified','Delivered'];
+function paidOrFree(c){return c.pay.state==='paid'||(c.fee===0&&c.feeReq&&c.feeReq.state==='approved')}
 function cleared(c){return c.pay.state==='paid'||(c.fee===0&&c.feeReq&&c.feeReq.state==='approved')||c.credit}
 function status(c){
   if(c.delivered)return 'Delivered';
@@ -371,7 +391,7 @@ function jobView(c){
    (c.f.itr==='ITR-1'?'<div class="note info">ITR-1: builds the official AY 2026-27 JSON (schema v1.1). Fill “Return details” first. Open the file in the official Common Offline Utility, let it validate, then file.</div>':'<div class="note info">'+esc(c.f.itr)+': official JSON is not built yet. This exports a draft data file for checking only. Prepare '+esc(c.f.itr)+' in the official utility.</div>')+
    '<div class="row"><button class="btn p" data-a="genJson" data-v="'+c.id+'"'+(canGen?'':' disabled')+'>'+(c.f.itr==='ITR-1'?'Generate ITR-1 JSON':'Generate draft JSON')+'</button></div>'+
    '<div class="fgrid"><div><label for="ack">Acknowledgement number after upload</label><input id="ack" value="'+esc(c.filed?c.filed.ack:'')+'"'+(canGen?'':' disabled')+'></div><div style="align-self:end"><button class="btn" data-a="markFiled" data-v="'+c.id+'"'+(canGen&&!c.filed?'':' disabled')+'>Mark filed · ask client for OTP</button></div></div>'+
-   '<div class="row"><button class="btn" data-a="everify" data-v="'+c.id+'"'+(c.filed&&!c.everified?'':' disabled')+'>Mark e-verified</button><button class="btn p" data-a="deliver" data-v="'+c.id+'"'+(c.everified&&!c.delivered?'':' disabled')+'>Deliver ITR-V + computation to client</button></div>'+
+   '<div class="row"><button class="btn" data-a="everify" data-v="'+c.id+'"'+(c.filed&&!c.everified?'':' disabled')+'>Mark e-verified</button><button class="btn p" data-a="deliver" data-v="'+c.id+'"'+(c.everified&&!c.delivered&&paidOrFree(c)?'':' disabled')+'>Deliver ITR-V + computation to client</button></div>'+(c.everified&&!c.delivered&&!paidOrFree(c)?'<div class="note warn">Pay-later client: documents are delivered after payment is confirmed. The client sees a payment request in their portal.</div>':'')+
    '<label for="itrv">Attach ITR-V (PDF)</label><input id="itrv" type="file" accept=".pdf" data-a="itrv" data-v="'+c.id+'"'+(c.filed?'':' disabled')+'>'+(c.itrv?'<div class="row"><span class="muted">Attached: '+esc(itrvName(c))+'</span>'+(LIVE&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Open</button>':'')+'</div>':'')+'</div>'+
   '</div></div>';
 }
@@ -457,16 +477,23 @@ function clientView(){
    (DB.settings.qr?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid #E5E7EB;border-radius:10px;padding:12px"><img src="'+DB.settings.qr+'" alt="UPI QR code to pay Nisnil Tax" style="width:200px;height:200px;object-fit:contain"><span class="muted">Scan with any UPI app'+(DB.settings.upi?' · '+esc(DB.settings.upi):'')+'</span>'+(DB.settings.qrNote?'<span class="muted">'+esc(DB.settings.qrNote)+'</span>':'')+'</div>':'')+
    (!c.payLink&&!DB.settings.qr?'<div class="note warn">Payment options will appear here shortly.</div>':'')+
    '<div class="fgrid"><div><label for="cutr">After paying, enter UTR / payment ID</label><input id="cutr"></div><div style="align-self:end"><button class="btn" data-a="cPayRef" data-v="'+c.id+'">I have paid</button></div></div>')+'</div>'+
-  '<div class="card"><h2>5. Your filed documents</h2>'+(c.delivered?'<div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>ITR-V acknowledgement'+(c.filed?' · '+esc(c.filed.ack):'')+'</span>'+(LIVE&&c.itrv&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Download</button>':'<span class="muted">'+esc(itrvName(c)||'ITR-V.pdf')+'</span>')+'</div><div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>Computation</span><button class="btn" data-a="viewComp" data-v="'+c.id+'">View</button></div><span class="muted">Keep a copy on your phone or Google Drive.</span>':c.filed?'<div class="note info">Filed. You will get an Aadhaar OTP from the Income Tax Department: share it with us to e-verify.</div>':'<span class="muted">Your ITR-V and computation appear here after filing.</span>')+'</div>';
+  '<div class="card"><h2>5. Your filed documents</h2>'+(c.delivered?
+   '<div class="note ok" style="font-size:14px;line-height:1.6"><b>Thank you, '+esc((c.f.name||'').split(' ')[0]||'')+'!</b> Your income tax return is filed and e-verified'+(c.filed?' (acknowledgement '+esc(c.filed.ack)+')':'')+'. '+(c.comp&&c.comp.net<0?'Your refund of '+INR(-c.comp.net)+' will be credited by the Income Tax Department after processing.':'')+' Thank you for choosing Nisnil.</div>'+
+   '<div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>ITR-V acknowledgement</span>'+(LIVE&&c.itrv&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Download</button>':'<span class="muted">'+esc(itrvName(c)||'ITR-V.pdf')+'</span>')+'</div>'+
+   '<div class="row between" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px"><span>Computation</span><button class="btn" data-a="viewComp" data-v="'+c.id+'">View</button></div>'+
+   (c.driveSaved?'<div class="note ok">Saved in your Google Drive on '+esc(c.driveSaved.d)+'. '+(c.driveSaved.link?'<a href="'+esc(c.driveSaved.link)+'" target="_blank" rel="noopener">Open folder</a>':'')+'</div><button class="btn" data-a="saveDrive" data-v="'+c.id+'">Save again to Google Drive</button>':
+    '<button class="btn p" data-a="saveDrive" data-v="'+c.id+'">Save both to my Google Drive</button><span class="muted">Google will ask once for permission to create these files in your Drive. We can only see the files we create, nothing else in your Drive.</span>')
+  :c.filed&&!paidOrFree(c)?'<div class="note warn">Your return is filed. Please pay the fee of '+INR(c.fee)+' (section 4) to receive your ITR-V and computation here.</div>'
+  :c.filed?'<div class="note info">Filed. You will get an Aadhaar OTP from the Income Tax Department: share it with us to e-verify.</div>':'<span class="muted">Your ITR-V and computation appear here after filing.</span>')+'</div>';
 }
 
 /* ---------- modals ---------- */
 function modal(html){layer.innerHTML='<div class="modal" data-a="closeBg"><div class="card" role="dialog" aria-modal="true">'+html+'</div></div>'}
 function closeModal(){layer.innerHTML=''}
-function compSheet(c){
+function compSheet(c,doc){
   const r=c.comp||(b0=>b0.best==='new'?b0.n:b0.o)(both(c.f));
   const L=(l,v,b)=>'<tr><td'+(b?' style="font-weight:600"':'')+'>'+l+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+INR(v)+'</td></tr>';
-  return '<div class="row between"><h2>Computation of total income · '+esc(DB.settings.ay)+'</h2><button class="btn" data-a="close">Close</button></div><div class="muted">'+esc(c.f.name)+' · PAN '+esc(c.f.pan)+' · '+esc(c.f.itr)+' · '+(r.regime==='new'?'New':'Old')+' regime</div><div class="tbl"><table><tbody>'+
+  return '<div class="row between"><h2>Computation of total income · '+esc(DB.settings.ay)+'</h2>'+(doc?'':'<button class="btn" data-a="close">Close</button>')+'</div><div class="muted">'+esc(c.f.name)+' · PAN '+esc(c.f.pan)+' · '+esc(c.f.itr)+' · '+(r.regime==='new'?'New':'Old')+' regime</div><div class="tbl"><table><tbody>'+
   L('Income from salary',r.salInc)+L('House property',r.hp)+L('Other sources',r.oth)+L('Business (presumptive)',r.biz)+L('Capital gains',r.stO+r.special)+L('Gross total income',r.gti,1)+L('Less: deductions',-r.ded)+L('Total income',r.total,1)+L('Tax on total income',r.taxN+r.taxS)+L('Less: rebate / relief',-(r.reb+r.mr))+L('Surcharge',r.surch)+L('Cess 4%',r.cess)+L('Total tax liability',r.liab,1)+L('Less: TDS / taxes paid',-r.paid)+L(r.net<0?'Refund due':'Tax payable',Math.abs(r.net),1)+
   '</tbody></table></div><span class="muted">Prepared by Nisnil Tax</span>';
 }
@@ -513,6 +540,7 @@ document.addEventListener('click',async e=>{
     case 'gsignin':try{await signIn();apply(await api('load'))}catch(err){toast(err.message)}break;
     case 'signout':signOut();break;
     case 'openFile':openFile(v,el.dataset.fid);break;
+    case 'saveDrive':try{await saveToDrive(c)}catch(err){toast(err.message)}break;
     case 'register':{const n=val('rgn'),ph=val('rgp');if(n.length<3){toast('Enter your full name');break}try{apply(await api('register',{name:n,phone:ph}))}catch(err){toast(err.message)}break}
     case 'role':if(LIVE)break;S.role=v;S.view=v==='owner'?'dash':'queue';S.cur=null;S.reveal={};S.emp=null;S.vaultKey=null;render();break;
     case 'empLogin':{const em=val('em').toLowerCase();const t=DB.team.find(x=>x.email.toLowerCase()===em);if(!t){toast('This Gmail is not registered. Ask the owner.');break}if(!t.active){toast('Access is switched off for this Gmail.');break}S.emp=em;log('Signed in',t.name);persist();render();break}
@@ -553,7 +581,7 @@ document.addEventListener('click',async e=>{
     case 'dlJson':try{saveBlob(c.f.pan+(el.dataset.kind==='itr1'?'_ITR1_AY2026-27.json':'_'+DB.settings.ay.replace(/\s/g,'')+'_draft.json'),new Blob([document.getElementById('jt').value],{type:'application/json'}))}catch(err){toast('Download blocked here: use Copy')}break;
     case 'markFiled':{const ack=val('ack');if(!/^\d{8,20}$/.test(ack)){toast('Enter the acknowledgement number (digits)');break}c.filed={ack,d:now()};log('Marked filed, ack '+ack+', for '+c.f.name);save();break}
     case 'everify':c.everified=true;log('E-verified return of '+c.f.name);save();break;
-    case 'deliver':c.delivered=true;log('Delivered ITR-V and computation to '+c.f.name);save();toast('Delivered to client portal');break;
+    case 'deliver':if(!paidOrFree(c)){toast('Payment not confirmed yet');break}c.delivered=true;log('Delivered ITR-V and computation to '+c.f.name);save();toast('Delivered to client portal');break;
     case 'cApprove':c.approval='approved';log('Client approved computation','Client · '+c.f.name);save();break;
     case 'cReject':{const r=val('rr');if(!r){toast('Tell us what is wrong first');break}c.approval='rejected';c.reason=r;log('Client rejected: '+r,'Client · '+c.f.name);save();break}
     case 'cPay':c.pay={state:'paid',method:'Razorpay',utr:''};log('Client paid '+INR(c.fee)+' via Razorpay (test)','Client · '+c.f.name);save();break;
