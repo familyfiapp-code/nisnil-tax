@@ -17,6 +17,9 @@
     var need = function (cond, msg) { if (!cond) E.push(msg); };
     if (!comp) { return { json: null, errors: ['Save & compute first.'], warnings: [] }; }
     var old = comp.regime === 'old';
+    var ay = f.ay || comp.ay || 'AY 2026-27';
+    if (ay !== 'AY 2026-27') return { json: null, errors: ['The official ITR-1 JSON is built for AY 2026-27 only so far. ' + ay + ' needs that year\u2019s schema: use the offline utility for now (prefill + enter these figures).'], warnings: [] };
+    if (String(f.fileSec) === 'U') return { json: null, errors: ['Updated return (ITR-U) uses a separate ITR-U form and schema: not built yet. Use the official utility.'], warnings: [] };
 
     /* ---------- eligibility for ITR-1 ---------- */
     if (comp.total > 5000000 + 125000) E.push('Total income is above ₹50 lakh: ITR-1 not allowed (use ITR-2).');
@@ -145,8 +148,8 @@
     var reb = Math.min(R(comp.reb + comp.mr), taxOnInc, 60000);
     var afterReb = taxOnInc - reb, cess = Math.round(afterReb * 0.04), gtl = afterReb + cess;
     var tc = { TotalTaxPayable: taxOnInc, Rebate87A: reb, TaxPayableOnRebate: afterReb, EducationCess: cess, GrossTaxLiability: gtl, Section89: 0, NetTaxLiability: gtl, TotalIntrstPay: 0, IntrstPay: { IntrstPayUs234A: 0, IntrstPayUs234B: 0, IntrstPayUs234C: 0, LateFilingFee234F: 0 }, TotTaxPlusIntrstPay: gtl };
-    if (sec === 12) { var fee = inc.TotalIncome > 500000 ? 5000 : (inc.TotalIncome > 250000 ? 1000 : 0); tc.IntrstPay.LateFilingFee234F = fee; W.push('Belated return: late fee u/s 234F of ₹' + fee + ' added. Interest u/s 234A/B/C is not calculated: check in the official utility.'); }
-    else W.push('Interest u/s 234A/B/C is not calculated: if advance tax was short, check in the official utility.');
+    tc.IntrstPay.IntrstPayUs234A = R(comp.i234A || 0); tc.IntrstPay.IntrstPayUs234B = R(comp.i234B || 0); tc.IntrstPay.IntrstPayUs234C = R(comp.i234C || 0); tc.IntrstPay.LateFilingFee234F = R(comp.f234F || 0);
+    if (tc.IntrstPay.IntrstPayUs234A + tc.IntrstPay.IntrstPayUs234B + tc.IntrstPay.IntrstPayUs234C + tc.IntrstPay.LateFilingFee234F > 0) W.push('Interest and fee included: 234A ₹' + tc.IntrstPay.IntrstPayUs234A + ', 234B ₹' + tc.IntrstPay.IntrstPayUs234B + ', 234C ₹' + tc.IntrstPay.IntrstPayUs234C + ', 234F ₹' + tc.IntrstPay.LateFilingFee234F + '. The utility recalculates them on the actual filing date.');
     tc.TotalIntrstPay = tc.IntrstPay.IntrstPayUs234A + tc.IntrstPay.IntrstPayUs234B + tc.IntrstPay.IntrstPayUs234C + tc.IntrstPay.LateFilingFee234F;
     tc.TotTaxPlusIntrstPay = gtl + tc.TotalIntrstPay;
 

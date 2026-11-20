@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="img/nisnil.png">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="config.js"></script>
+<script src="engine.js"></script>
 <script src="itr1.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -173,19 +174,23 @@ async function driveCreate(tok,meta,blob){
   else r=await fetch('https://www.googleapis.com/drive/v3/files?fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify(meta)});
   if(!r.ok)throw new Error('Google Drive refused the file ('+r.status+')');return r.json();
 }
+async function driveFolder(tok,name,parent){
+  const q="name='"+name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"' and mimeType='application/vnd.google-apps.folder' and trashed=false"+(parent?" and '"+parent+"' in parents":" and 'root' in parents");
+  try{const lr=await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,webViewLink)',{headers:{Authorization:'Bearer '+tok}});if(lr.ok){const lj=await lr.json();if(lj.files&&lj.files[0])return lj.files[0]}}catch(e){}
+  return driveCreate(tok,Object.assign({name,mimeType:'application/vnd.google-apps.folder'},parent?{parents:[parent]}:{}));
+}
 async function saveToDrive(c){
   if(!LIVE){toast('Demo: Google Drive saving works on tax.nisnil.co.in');return}
   const tok=await driveToken();
   busy(true);
   try{
-    const parentName='Nisnil ITR – '+DB.settings.ay;
-    let parent=null;
-    try{const q=encodeURIComponent("name='"+parentName.replace(/'/g,"\\'")+"' and mimeType='application/vnd.google-apps.folder' and trashed=false");const lr=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,webViewLink)',{headers:{Authorization:'Bearer '+tok}});if(lr.ok){const lj=await lr.json();parent=lj.files&&lj.files[0]}}catch(e){}
-    if(!parent)parent=await driveCreate(tok,{name:parentName,mimeType:'application/vnd.google-apps.folder'});
-    const folder=await driveCreate(tok,{name:c.f.name+(c.f.relation&&c.f.relation!=='Self'?' ('+c.f.relation+')':''),mimeType:'application/vnd.google-apps.folder',parents:[parent.id]});
+    /* My Drive › Nisnil ITR › <member> › <AY> : one folder per person, one sub-folder per year */
+    const root=await driveFolder(tok,'Nisnil ITR',null);
+    const person=await driveFolder(tok,c.f.name+(c.f.relation&&c.f.relation!=='Self'?' ('+c.f.relation+')':''),root.id);
+    const folder=await driveFolder(tok,ayOf(c.f),person.id);
     if(c.itrv&&c.itrv.fid){const r=await api('getFile',{id:c.id,fid:c.itrv.fid});const bin=atob(r.b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);await driveCreate(tok,{name:r.name,parents:[folder.id]},new Blob([u],{type:r.mime||'application/pdf'}))}
     const html='<html><head><meta charset="utf-8"></head><body style="font-family:Arial">'+compSheet(c,true).replace(/<button[^>]*>.*?<\/button>/g,'')+'<p>Acknowledgement: '+esc(c.filed?c.filed.ack:'')+'</p></body></html>';
-    await driveCreate(tok,{name:'Computation – '+c.f.name+' – '+DB.settings.ay,mimeType:'application/vnd.google-apps.document',parents:[folder.id]},new Blob([html],{type:'text/html'}));
+    await driveCreate(tok,{name:'Computation – '+c.f.name+' – '+ayOf(c.f),mimeType:'application/vnd.google-apps.document',parents:[folder.id]},new Blob([html],{type:'text/html'}));
     c.driveSaved={d:now(),link:folder.webViewLink||''};log('Client saved ITR-V and computation to their Google Drive','Client · '+c.f.name);save();toast('Saved to your Google Drive');
   }finally{busy(false)}
 }
@@ -201,66 +206,22 @@ function log(x,who){if(LIVE){S.notes.push(String(x));return}DB.log.unshift({t:no
 function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 const C=id=>DB.clients.find(c=>c.id===id);
 
-/* ---------- tax engine (FY 2026-27 / AY 2027-28 and FY 2025-26 / AY 2026-27: same slabs) ---------- */
-const SLABS={
-  new:[[400000,0],[800000,.05],[1200000,.10],[1600000,.15],[2000000,.20],[2400000,.25],[Infinity,.30]],
-  old_below60:[[250000,0],[500000,.05],[1000000,.20],[Infinity,.30]],
-  old_60to79:[[300000,0],[500000,.05],[1000000,.20],[Infinity,.30]],
-  old_80plus:[[500000,0],[1000000,.20],[Infinity,.30]]
-};
-function slab(inc,s){let t=0,prev=0;for(const [lim,r] of s){if(inc>prev){t+=(Math.min(inc,lim)-prev)*r}prev=lim}return t}
-function compute(f,regime){
-  const old=regime==='old';const sl=old?SLABS['old_'+f.age]:SLABS.new;const exLimit=sl[0][0];
-  const sal=N(f.salary);const std=sal>0?Math.min(sal,old?50000:75000):0;
-  const exA=old?N(f.exemptAllow):0;const pt=old?N(f.profTax):0;
-  const salInc=Math.max(0,sal-exA-std-pt);
-  let hp=0;
-  if(f.hpType==='self'){hp=old?-Math.min(N(f.hpInterest),200000):0}
-  else if(f.hpType==='let'){const nav=Math.max(0,N(f.rent)-N(f.municipal));hp=nav*0.7-N(f.hpInterest);hp=old?Math.max(hp,-200000):Math.max(hp,0)}
-  const oth=N(f.savingsInt)+N(f.fdInt)+N(f.dividend)+N(f.otherInc);
-  const biz=N(f.biz);const stO=N(f.stcgOther);
-  const normal=Math.max(0,salInc+hp+oth+biz+stO);
-  const s111=N(f.stcg111A),l112=N(f.ltcg112A),lO=N(f.ltcgOther);
-  const special=s111+l112+lO;
-  const gti=normal+special;
-  let ded=N(f.d80CCD2);
-  if(old){
-    const tta=f.age==='below60'?Math.min(N(f.savingsInt),10000):Math.min(N(f.savingsInt)+N(f.fdInt),50000);
-    ded+=Math.min(N(f.d80C),150000)+Math.min(N(f.d80CCD1B),50000)+N(f.d80D)+N(f.d80G)+N(f.dOther)+tta;
-  }
-  ded=Math.min(ded,normal);
-  const normalTI=Math.round(Math.max(0,normal-ded)/10)*10;
-  const total=normalTI+special;
-  const taxN=slab(normalTI,sl);
-  let unused=Math.max(0,exLimit-normalTI);
-  const a1=Math.min(unused,s111);unused-=a1;
-  const t111=0.20*Math.max(0,s111-a1);
-  const l112tax=Math.max(0,l112-125000);const a2=Math.min(unused,l112tax);unused-=a2;
-  const t112=0.125*Math.max(0,l112tax-a2);
-  const tLO=0.125*Math.max(0,lO-Math.min(unused,lO));
-  const taxS=t111+t112+tLO;
-  let reb=0,mr=0;
-  if(old){if(total<=500000)reb=Math.min(taxN+taxS,12500)}
-  else{
-    if(total<=1200000)reb=Math.min(taxN,60000);
-    else if(special===0&&taxN>total-1200000)mr=taxN-(total-1200000);
-  }
-  const before=Math.max(0,taxN+taxS-reb-mr);
-  let sr=0;
-  if(total>50000000)sr=old?.37:.25;else if(total>20000000)sr=.25;else if(total>10000000)sr=.15;else if(total>5000000)sr=.10;
-  const srSpecial=Math.min(sr,.15);
-  const surch=total>5000000?Math.max(0,(taxN-reb-mr))*sr+taxS*srSpecial:0;
-  const cess=(before+surch)*0.04;
-  const liab=Math.round((before+surch+cess)/10)*10;
-  const paid=N(f.tds)+N(f.tdsOthAmt)+N(f.tcs)+N(f.advTax)+N(f.saTax);
-  return {regime,sal,exA,std,pt,salInc,hp,oth,biz,stO,special,s111,l112,lO,gti,ded,total,taxN,taxS,reb,mr,surch,cess,liab,paid,net:liab-paid,surchargeNote:total>5000000};
-}
-function both(f){const o=compute(f,'old'),n=compute(f,'new');return {o,n,best:n.liab<=o.liab?'new':'old',save:Math.abs(o.liab-n.liab)}}
-function suggestITR(f){
-  if(N(f.biz)>0)return 'ITR-4';
-  const r=compute(f,'new');
-  if(r.total>5000000||N(f.stcg111A)>0||N(f.ltcgOther)>0||N(f.stcgOther)>0||N(f.ltcg112A)>125000||f.hpType==='let'&&N(f.rent)>0&&false)return 'ITR-2';
-  return 'ITR-1';
+/* ---------- tax engine: engine.js (AY 2023-24 to AY 2027-28) ---------- */
+const AYS=TaxEngine.AYS;
+function ayOf(f){return f&&f.ay&&TaxEngine.YEARS[f.ay]?f.ay:DB.settings.ay}
+function F(f){return Object.assign({},f,{ay:ayOf(f)})}
+function compute(f,regime){return TaxEngine.compute(F(f),regime)}
+function both(f){return TaxEngine.both(F(f))}
+function suggestITR(f){return TaxEngine.suggestITR(F(f))}
+function routeCheck(f,comp){return TaxEngine.checkRoute(F(f),comp)}
+/* ---------- one person, many years ---------- */
+const personKey=c=>(c.f.pan?'P:'+String(c.f.pan).toUpperCase():'N:'+String(c.f.name||'').toLowerCase().trim()+'|'+String(c.f.email||'').toLowerCase());
+function yearsOf(c){return DB.clients.filter(x=>personKey(x)===personKey(c)).sort((a,b)=>ayOf(a.f)<ayOf(b.f)?-1:1)}
+function yearBar(c,act,addAct){
+  const ys=yearsOf(c);
+  return '<div class="card"><div class="row between"><h2>Years · '+esc(c.f.name)+'</h2><button class="btn" data-a="'+addAct+'" data-v="'+c.id+'">+ Add year</button></div><span class="muted">Each year has its own details, computation, JSON, fee and filed copy. Pick a year, finish it, then move to the next.</span><div class="row">'+
+   ys.map(x=>{const r=TaxEngine.routes(Object.assign({},x.f,{ay:ayOf(x.f)}),ayOf(x.f),x.f.itr,x.f.fileDate||TaxEngine.todayISO());const route=r.original?'On time':r.belated?'Belated':r.updated?'ITR-U '+r.updatedRate+'%':'119(2)(b)';
+     return '<button class="btn" data-a="'+act+'" data-v="'+x.id+'" style="height:auto;padding:8px 12px;text-align:left;'+(x.id===c.id?'background:#111827;color:#fff;border-color:#111827':'')+'"><div style="font-weight:500">'+esc(ayOf(x.f))+'</div><div style="font-size:12px;opacity:.8">'+esc(x.f.itr)+' · '+esc(status(x))+' · '+route+'</div></button>'}).join('')+'</div></div>';
 }
 
 /* ---------- status ---------- */
@@ -339,34 +300,35 @@ function queueView(){
   '<div class="row">'+tabs.map(t=>{const n=t==='All'?DB.clients.length:DB.clients.filter(c=>status(c)===t).length;return '<button class="btn" data-a="tab" data-v="'+t+'" style="border-radius:999px;'+(S.tab===t?'background:#111827;color:#fff;border-color:#111827':'')+'">'+t+' · '+n+'</button>'}).join('')+'</div>'+queueTable(cs);
 }
 function queueTable(cs){
-  return '<div class="card" style="padding:0"><div class="tbl"><table><thead><tr><th>Client</th><th>PAN</th><th>ITR</th><th>Docs</th><th>Status</th><th class="num">Fee</th><th>Payment</th><th class="num">Tax payable / (refund)</th><th></th></tr></thead><tbody>'+
-  (cs.length?cs.map(c=>{const s=status(c);return '<tr><td><button class="btn" style="border:0;padding:0;height:auto;color:#0F766E;font-weight:500" data-a="open" data-v="'+c.id+'">'+esc(c.f.name)+'</button>'+(c.f.relation&&c.f.relation!=='Self'?'<div class="muted">'+esc(c.f.relation)+' of '+esc(c.f.email)+'</div>':'')+'</td><td class="mono">'+esc(c.f.pan)+'</td><td>'+esc(c.f.itr)+'</td><td>'+c.docs.length+(c.prefill?' + prefill':'')+'</td><td>'+pill(s)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+payLabel(c)+'</td><td class="num">'+(c.comp?INR(c.comp.net):'—')+'</td><td><button class="btn" data-a="open" data-v="'+c.id+'">Open</button></td></tr>'}).join(''):'<tr><td colspan="9" class="muted" style="padding:20px">No clients here.</td></tr>')+
+  return '<div class="card" style="padding:0"><div class="tbl"><table><thead><tr><th>Client</th><th>PAN</th><th>Year · ITR</th><th>Docs</th><th>Status</th><th class="num">Fee</th><th>Payment</th><th class="num">Tax payable / (refund)</th><th></th></tr></thead><tbody>'+
+  (cs.length?cs.map(c=>{const s=status(c);return '<tr><td><button class="btn" style="border:0;padding:0;height:auto;color:#0F766E;font-weight:500" data-a="open" data-v="'+c.id+'">'+esc(c.f.name)+'</button>'+(c.f.relation&&c.f.relation!=='Self'?'<div class="muted">'+esc(c.f.relation)+' of '+esc(c.f.email)+'</div>':'')+'</td><td class="mono">'+esc(c.f.pan)+'</td><td>'+esc(ayOf(c.f).replace('AY ',''))+' · '+esc(c.f.itr)+'</td><td>'+c.docs.length+(c.prefill?' + prefill':'')+'</td><td>'+pill(s)+'</td><td class="num">'+INR(c.fee)+'</td><td>'+payLabel(c)+'</td><td class="num">'+(c.comp?INR(c.comp.net):'—')+'</td><td><button class="btn" data-a="open" data-v="'+c.id+'">Open</button></td></tr>'}).join(''):'<tr><td colspan="9" class="muted" style="padding:20px">No clients here.</td></tr>')+
   '</tbody></table></div></div>';
 }
 
 function jobView(c){
   if(!c)return '<p>Client not found.</p>';
   const s=status(c),cur=Math.max(0,FLOW.indexOf(s==='Rejected'?'Sent to client':s==='Awaiting payment'?'Approved':s));
-  const B=both(c.f),sug=suggestITR(c.f);
+  const B=both(c.f),sug=suggestITR(c.f),cgY=TaxEngine.rules(ayOf(c.f)),RC=routeCheck(c.f,B.best==='new'?B.n:B.o);
   const owner=S.role==='owner';
   const fr=c.feeReq;
   const fields=[
-   ['Personal',[['name','Name','text'],['pan','PAN','text'],['email','Client Gmail','email'],['phone','Mobile','text'],['age','Age group','sel',[['below60','Below 60'],['60to79','60 to 79'],['80plus','80 and above']]],['itr','ITR form','sel',[['ITR-1','ITR-1'],['ITR-2','ITR-2'],['ITR-3','ITR-3'],['ITR-4','ITR-4']]]]],
+   ['Personal',[['name','Name','text'],['pan','PAN','text'],['email','Client Gmail','email'],['phone','Mobile','text'],['age','Age group','sel',[['below60','Below 60'],['60to79','60 to 79'],['80plus','80 and above']]],['ay','Assessment year','sel',AYS.slice().reverse().map(a=>[a,a+' (FY '+TaxEngine.YEARS[a].fy+')'])],['itr','ITR form','sel',[['ITR-1','ITR-1'],['ITR-2','ITR-2'],['ITR-3','ITR-3'],['ITR-4','ITR-4']]],['itrMode','Form choice','sel',[['auto','Auto-select on save (recommended)'],['manual','Manual: keep my choice']]]]],
+   ['Form selection checks',[['residency','Residential status','sel',[['R','Resident'],['NR','Non-resident']]],['foreignAssets','Foreign assets or foreign income?','sel',[['N','No'],['Y','Yes']]],['director','Director in a company?','sel',[['N','No'],['Y','Yes']]],['unlisted','Holds unlisted equity shares?','sel',[['N','No'],['Y','Yes']]],['multiHP','More than one house property?','sel',[['N','No'],['Y','Yes']]],['agriInc','Agricultural income']]],
    ['Salary',[['salary','Gross salary'],['exemptAllow','Exempt allowances u/s 10 (HRA, LTA) · old regime'],['profTax','Professional tax · old regime']]],
    ['House property',[['hpType','Type','sel',[['none','None'],['self','Self-occupied'],['let','Let out']]],['rent','Annual rent received'],['municipal','Municipal tax paid'],['hpInterest','Home-loan interest']]],
    ['Other sources',[['savingsInt','Savings bank interest'],['fdInt','FD / RD interest'],['dividend','Dividend'],['otherInc','Other income']]],
-   ['Business (presumptive)',[['biz','Income u/s 44AD / 44ADA']]],
-   ['Capital gains',[['stcg111A','STCG listed equity, 111A (20%)'],['ltcg112A','LTCG listed equity, 112A (12.5% above ₹1.25 lakh)'],['ltcgOther','Other LTCG (12.5%)'],['stcgOther','Other STCG (slab rate)']]],
+   ['Business',[['biz','Presumptive income u/s 44AD / 44ADA'],['bizRegular','Regular business / F&O / intraday income (ITR-3)']]],
+   ['Capital gains',[['stcg111A',cgY.r111===.2?'STCG listed equity, 111A (20%)'+(cgY.split?' · sold on/after 23-Jul-2024':''):'STCG listed equity, 111A (15%)'],['ltcg112A',cgY.r112===.125?'LTCG listed equity, 112A (12.5% above ₹1.25 lakh)'+(cgY.split?' · sold on/after 23-Jul-2024':''):'LTCG listed equity, 112A (10% above ₹1 lakh)']].concat(cgY.split?[['stcg111A_pre','STCG 111A sold before 23-Jul-2024 (15%)'],['ltcg112A_pre','LTCG 112A sold before 23-Jul-2024 (10%)']]:[]).concat([['ltcgOther','Other LTCG (12.5%)'],['stcgOther','Other STCG (slab rate)']])],
    ['Deductions',[['d80C','80C / 80CCC / 80CCD(1) · old'],['d80CCD1B','80CCD(1B) NPS · old'],['d80D','80D health insurance · old'],['d80G','80G qualifying amount · old'],['dOther','Other Chapter VI-A · old'],['d80CCD2','80CCD(2) employer NPS · both']]],
-   ['Taxes paid',[['tds','TDS on salary (Form 16)'],['empName','Employer name','text'],['empTAN','Employer TAN','text'],['tdsOthAmt','TDS on interest / other (26AS)'],['tdsOthIncome','Income on which that TDS was cut'],['tdsOthName','Bank / deductor name','text'],['tdsOthTAN','Bank / deductor TAN','text'],['tcs','TCS'],['advTax','Advance tax'],['saTax','Self-assessment tax'],['chBSR','Challan BSR code','text'],['chDate','Challan date','date'],['chSerial','Challan serial no.']]],
-   ['Return details (needed for ITR JSON)',[['dob','Date of birth','date'],['aadhaar','Aadhaar (12 digits)','text'],['fatherName','Father\u2019s name','text'],['addrRes','Flat / house no.','text'],['addrArea','Area / locality','text'],['addrCity','City / district','text'],['addrState','State','sel',(window.ITR1?Object.entries(ITR1.STATES):[]).map(([k,v])=>[k,v])],['addrPin','PIN code','text'],['empCat','Employer category','sel',[['','Select']].concat(window.ITR1?ITR1.EMP_CATS:[])],['bankIFSC','Refund bank IFSC','text'],['bankName','Bank name','text'],['bankAcc','Account number','text'],['bankType','Account type','sel',[['SB','Savings'],['CA','Current'],['OD','Overdraft'],['NRO','NRO'],['OTH','Other']]],['fileSec','Return type','sel',[['11','Original – 139(1) on time'],['12','Belated – 139(4)'],['17','Revised – 139(5)']]],['origAck','Original ack no. (revised only)','text'],['origDate','Original filing date (revised only)','date'],['exemptNature','Exempt allowance type','sel',[['10(13A)','HRA – 10(13A)'],['10(5)','LTA – 10(5)'],['10(14)(i)','Other – 10(14)(i)']]],['hraBasic','HRA: basic + DA for the year'],['hraRecv','HRA: HRA received'],['hraRent','HRA: rent paid'],['hraMetro','HRA: city','sel',[['2','Non-metro'],['1','Metro (Delhi, Mumbai, Kolkata, Chennai)']]],['ltcgSale','LTCG 112A: total sale value']]]
+   ['Taxes paid',[['tds','TDS on salary (Form 16)'],['empName','Employer name','text'],['empTAN','Employer TAN','text'],['tdsOthAmt','TDS on interest / other (26AS)'],['tdsOthIncome','Income on which that TDS was cut'],['tdsOthName','Bank / deductor name','text'],['tdsOthTAN','Bank / deductor TAN','text'],['tcs','TCS'],['advTax','Advance tax (total)'],['adv1','Advance tax paid by 15 Jun'],['adv2','Advance tax paid 16 Jun – 15 Sep'],['adv3','Advance tax paid 16 Sep – 15 Dec'],['adv4','Advance tax paid 16 Dec – 15 Mar'],['saTax','Self-assessment tax'],['saTaxDate','Self-assessment tax paid on','date'],['chBSR','Challan BSR code','text'],['chDate','Challan date','date'],['chSerial','Challan serial no.']]],
+   ['Return details (needed for ITR JSON)',[['dob','Date of birth','date'],['aadhaar','Aadhaar (12 digits)','text'],['fatherName','Father\u2019s name','text'],['addrRes','Flat / house no.','text'],['addrArea','Area / locality','text'],['addrCity','City / district','text'],['addrState','State','sel',(window.ITR1?Object.entries(ITR1.STATES):[]).map(([k,v])=>[k,v])],['addrPin','PIN code','text'],['empCat','Employer category','sel',[['','Select']].concat(window.ITR1?ITR1.EMP_CATS:[])],['bankIFSC','Refund bank IFSC','text'],['bankName','Bank name','text'],['bankAcc','Account number','text'],['bankType','Account type','sel',[['SB','Savings'],['CA','Current'],['OD','Overdraft'],['NRO','NRO'],['OTH','Other']]],['fileSec','Return type','sel',[['11','Original – 139(1) on time'],['12','Belated – 139(4)'],['17','Revised – 139(5)'],['U','Updated – 139(8A) ITR-U'],['20','After condonation – 119(2)(b)']]],['fileDate','Planned filing date (for interest)','date'],['origFiled','Return already filed for this year? (ITR-U)','sel',[['N','No'],['Y','Yes']]],['origTaxPaid','Tax paid with earlier return (ITR-U)'],['origRegime','Regime used in earlier return','sel',[['','Not filed / not known'],['new','New regime'],['old','Old regime']]],['origOnTime','Revised return: was the original filed on time?','sel',[['Y','Yes'],['N','No (belated)']]],['form10IE','Business: Form 10-IE / 10-IEA filed by due date?','sel',[['N','No'],['Y','Yes']]],['form10IERegime','Regime chosen in that form','sel',[['old','Old regime'],['new','New regime']]],['origRefund','Refund received on earlier return (ITR-U)'],['origAck','Original ack no. (revised only)','text'],['origDate','Original filing date (revised only)','date'],['exemptNature','Exempt allowance type','sel',[['10(13A)','HRA – 10(13A)'],['10(5)','LTA – 10(5)'],['10(14)(i)','Other – 10(14)(i)']]],['hraBasic','HRA: basic + DA for the year'],['hraRecv','HRA: HRA received'],['hraRent','HRA: rent paid'],['hraMetro','HRA: city','sel',[['2','Non-metro'],['1','Metro (Delhi, Mumbai, Kolkata, Chennai)']]],['ltcgSale','LTCG 112A: total sale value']]]
   ];
   const fld=([k,l,t,o])=>'<div><label for="f_'+k+'">'+l+'</label>'+(t==='sel'?'<select id="f_'+k+'" data-f="'+k+'">'+o.map(([v,x])=>'<option value="'+v+'"'+(c.f[k]===v?' selected':'')+'>'+x+'</option>').join('')+'</select>':'<input id="f_'+k+'" data-f="'+k+'" '+(t?'type="'+t+'"':'inputmode="numeric" data-num="1"')+' value="'+esc(t?(c.f[k]==null?'':c.f[k]):(N(c.f[k])||''))+'">')+'</div>';
   const line=(l,o,n,b)=>'<tr><td'+(b?' style="font-weight:600"':'')+'>'+l+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+o+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+n+'</td></tr>';
   const o=B.o,n=B.n;
   const canGen=c.approval==='approved'&&cleared(c);
   const credHtml=c.cred?('<div class="row between"><span class="muted">User ID</span><span class="mono">'+esc(c.cred.user)+'</span></div><div class="row between"><span class="muted">Password</span><span class="mono">'+(S.reveal[c.id]?esc(S.reveal[c.id]):'••••••••••')+'</span></div><div class="row"><button class="btn" data-a="reveal" data-v="'+c.id+'">'+(S.reveal[c.id]?'Hide':'Reveal · logged')+'</button><button class="btn" data-a="copyPass" data-v="'+c.id+'">Copy · logged</button><button class="btn" data-a="editCred" data-v="'+c.id+'">Change</button></div>'):'<button class="btn" data-a="editCred" data-v="'+c.id+'">+ Save portal login</button>';
-  return '<div class="row between"><div class="row"><button class="btn" data-a="nav" data-v="queue">← Queue</button><h1>'+esc(c.f.name)+'</h1><span class="mono muted">'+esc(c.f.pan)+'</span>'+pill(c.f.itr+' · '+DB.settings.ay,'New')+pill(s)+'</div>'+(owner?'<button class="btn r" data-a="delClient" data-v="'+c.id+'">Delete client</button>':'')+'</div>'+
+  return '<div class="row between"><div class="row"><button class="btn" data-a="nav" data-v="queue">← Queue</button><h1>'+esc(c.f.name)+'</h1><span class="mono muted">'+esc(c.f.pan)+'</span>'+pill(c.f.itr+' · '+ayOf(c.f),'New')+pill(s)+'</div>'+'<div class="row"><button class="btn" data-a="copyYear" data-v="'+c.id+'">Copy to another year</button>'+(owner?'<button class="btn r" data-a="delClient" data-v="'+c.id+'">Delete client</button>':'')+'</div></div>'+yearBar(c,'open','copyYear')+
   '<div class="steps">'+FLOW.map((x,i)=>'<span class="pill" style="'+(i<cur?'background:#E6F4F1;color:#115E59':i===cur?'background:#111827;color:#fff':'background:#fff;color:#6B7280;border:1px solid #E5E7EB')+'">'+(i<cur?'✓ ':'')+x+'</span>').join('')+'</div>'+
   (c.approval==='rejected'?'<div class="note bad">Client rejected the computation: “'+esc(c.reason||'no reason given')+'”. Fix and resend.</div>':'')+
   '<div class="cols"><div class="c1">'+
@@ -380,9 +342,9 @@ function jobView(c){
    fields.map(([g,fs],i)=>'<details'+(i<2||fs.some(([k])=>N(c.f[k])>0&&k!=='age')?' open':'')+'><summary>'+g+'</summary><div class="fgrid" style="margin-top:10px">'+fs.map(fld).join('')+'</div></details>').join('')+'</div>'+
    '<div class="card"><div class="row between"><h2>5. Computation · old vs new regime</h2>'+pill((B.best==='new'?'New':'Old')+' regime saves '+INR(B.save),'Approved')+'</div>'+
    '<div class="tbl"><table><thead><tr><th>Item</th><th class="num">Old regime</th><th class="num">New regime</th></tr></thead><tbody>'+
-   line('Gross salary',INR(o.sal),INR(n.sal))+line('Less: exempt allowances',INR(-o.exA),INR(-n.exA))+line('Less: standard deduction',INR(-o.std),INR(-n.std))+line('Less: professional tax',INR(-o.pt),INR(-n.pt))+line('Income from salary',INR(o.salInc),INR(n.salInc))+line('House property',INR(o.hp),INR(n.hp))+line('Other sources',INR(o.oth),INR(n.oth))+line('Business (presumptive)',INR(o.biz),INR(n.biz))+line('Capital gains at slab rate',INR(o.stO),INR(n.stO))+line('Capital gains at special rates',INR(o.special),INR(n.special))+line('Gross total income',INR(o.gti),INR(n.gti),1)+line('Less: Chapter VI-A',INR(-o.ded),INR(-n.ded))+line('Total income',INR(o.total),INR(n.total),1)+line('Tax at slab rates',INR(o.taxN),INR(n.taxN))+line('Tax at special rates',INR(o.taxS),INR(n.taxS))+line('Less: rebate u/s 87A',INR(-o.reb),INR(-n.reb))+line('Less: marginal relief (87A)',INR(-o.mr),INR(-n.mr))+line('Surcharge',INR(o.surch),INR(n.surch))+line('Health &amp; education cess 4%',INR(o.cess),INR(n.cess))+line('Total tax liability',INR(o.liab),INR(n.liab),1)+line('Less: taxes paid',INR(-o.paid),INR(-n.paid))+line('Payable / (refund)',INR(o.net),INR(n.net),1)+
+   line('Gross salary',INR(o.sal),INR(n.sal))+line('Less: exempt allowances',INR(-o.exA),INR(-n.exA))+line('Less: standard deduction',INR(-o.std),INR(-n.std))+line('Less: professional tax',INR(-o.pt),INR(-n.pt))+line('Income from salary',INR(o.salInc),INR(n.salInc))+line('House property',INR(o.hp),INR(n.hp))+line('Other sources',INR(o.oth),INR(n.oth))+line('Business (presumptive)',INR(o.biz),INR(n.biz))+line('Capital gains at slab rate',INR(o.stO),INR(n.stO))+line('Capital gains at special rates',INR(o.special),INR(n.special))+line('Gross total income',INR(o.gti),INR(n.gti),1)+line('Less: Chapter VI-A',INR(-o.ded),INR(-n.ded))+line('Total income',INR(o.total),INR(n.total),1)+line('Tax at slab rates',INR(o.taxN),INR(n.taxN))+line('Tax at special rates',INR(o.taxS),INR(n.taxS))+line('Less: rebate u/s 87A',INR(-o.reb),INR(-n.reb))+line('Less: marginal relief (87A)',INR(-o.mr),INR(-n.mr))+line('Surcharge',INR(o.surch),INR(n.surch))+line('Health &amp; education cess 4%',INR(o.cess),INR(n.cess))+line('Total tax liability',INR(o.liab),INR(n.liab),1)+line('Less: taxes paid',INR(-o.paid),INR(-n.paid))+line('Interest u/s 234A (late filing)',INR(o.i234A),INR(n.i234A))+line('Interest u/s 234B (advance tax shortfall)',INR(o.i234B),INR(n.i234B))+line('Interest u/s 234C (deferment)',INR(o.i234C),INR(n.i234C))+line('Late fee u/s 234F',INR(o.f234F),INR(n.f234F))+(String(c.f.fileSec)==='U'?line('Additional tax u/s 140B (ITR-U, '+Math.round(n.addRate*100)+'%)',INR(o.addTax),INR(n.addTax)):'')+line('Payable / (refund)',INR(o.net),INR(n.net),1)+
    '</tbody></table></div>'+(o.surchargeNote?'<div class="note warn">Income above ₹50 lakh: surcharge marginal relief is not applied yet. Check manually.</div>':'')+
-   '<span class="muted">Interest u/s 234A/B/C is not calculated yet: add it manually if due.</span>'+
+   (B.forced?'<div class="note warn">'+esc(B.forcedWhy)+'</div>':'')+filingCard(c,RC)+
    '<div class="row"><button class="btn" data-a="viewComp" data-v="'+c.id+'">View client computation</button><button class="btn p" data-a="send" data-v="'+c.id+'"'+(!c.comp||(c.sent&&c.approval!=='rejected')?' disabled':'')+'>'+(c.sent&&c.approval==='none'?'Sent · waiting for client':c.approval==='approved'?'Client approved ✓':'Upload computation to client')+'</button></div></div>'+
    '<div class="card"><h2>6. Payment gate</h2><div class="grid"><div class="kpi"><span class="muted">Fee</span><b>'+INR(c.fee)+'</b><span class="muted">Standard '+esc(c.f.itr)+': '+INR(DB.settings.fees[c.f.itr]||0)+'</span></div><div class="kpi"><span class="muted">Payment</span><div>'+payLabel(c)+'</div><span class="muted">'+(c.pay.utr?'UTR '+esc(c.pay.utr):'&nbsp;')+'</span></div></div>'+
    (fr&&fr.state==='pending'?'<div class="note warn">Fee change requested: '+esc(fr.type)+(fr.type==='Discount'?' to '+INR(fr.amount):'')+' · “'+esc(fr.reason)+'” · waiting for owner</div>':fr?'<div class="note '+(fr.state==='approved'?'ok':'bad')+'">Fee request '+esc(fr.type)+' '+esc(fr.state)+'</div>':'')+
@@ -392,19 +354,24 @@ function jobView(c){
    '<div class="fgrid"><div><label for="pm">Payment received by</label><select id="pm"><option>UPI QR</option><option>Razorpay link</option><option>Cash at office</option><option>Bank transfer</option></select></div><div><label for="utr">UTR / Razorpay payment ID</label><input id="utr" placeholder="UTR or pay_..."></div><div style="align-self:end"><button class="btn" data-a="payRec" data-v="'+c.id+'"'+(c.pay.state==='paid'?' disabled':'')+'>'+(owner?'Record &amp; verify':'Record · owner verifies')+'</button></div></div>'+
    '<div class="fgrid"><div><label for="frt">Fee change</label><select id="frt"><option>Discount</option><option>Free filing</option><option>Pay after filing</option></select></div><div><label for="fra">New amount (discount)</label><input id="fra" inputmode="numeric"></div><div><label for="frr">Reason</label><input id="frr" placeholder="e.g. repeat client"></div><div style="align-self:end"><button class="btn d" data-a="feeReq" data-v="'+c.id+'">'+(owner?'Apply':'Send to owner')+'</button></div></div></div>'+
    '<div class="card"><h2>7. File &amp; deliver</h2>'+(!canGen?'<div class="note warn">Locked until the client approves the computation and payment is cleared (paid, or a free / pay-later request approved by the owner).</div>':'')+
-   (c.f.itr==='ITR-1'?'<div class="note info">ITR-1: builds the official AY 2026-27 JSON (schema v1.1). Fill “Return details” first. Open the file in the official Common Offline Utility, let it validate, then file.</div>':'<div class="note info">'+esc(c.f.itr)+': official JSON is not built yet. This exports a draft data file for checking only. Prepare '+esc(c.f.itr)+' in the official utility.</div>')+
+   (c.f.itr==='ITR-1'?'<div class="note info">ITR-1 for AY 2026-27 (on-time, belated, revised): builds the official JSON (schema v1.1). Other years and ITR-U: the computation, interest and route are ready; file them through the official utility until each year’s schema is added. Fill “Return details” first. Open the file in the official Common Offline Utility, let it validate, then file.</div>':'<div class="note info">'+esc(c.f.itr)+': official JSON is not built yet. This exports a draft data file for checking only. Prepare '+esc(c.f.itr)+' in the official utility.</div>')+
    '<div class="row"><button class="btn p" data-a="genJson" data-v="'+c.id+'"'+(canGen?'':' disabled')+'>'+(c.f.itr==='ITR-1'?'Generate ITR-1 JSON':'Generate draft JSON')+'</button></div>'+
    '<div class="fgrid"><div><label for="ack">Acknowledgement number after upload</label><input id="ack" value="'+esc(c.filed?c.filed.ack:'')+'"'+(canGen?'':' disabled')+'></div><div style="align-self:end"><button class="btn" data-a="markFiled" data-v="'+c.id+'"'+(canGen&&!c.filed?'':' disabled')+'>Mark filed · ask client for OTP</button></div></div>'+
    '<div class="row"><button class="btn" data-a="everify" data-v="'+c.id+'"'+(c.filed&&!c.everified?'':' disabled')+'>Mark e-verified</button><button class="btn p" data-a="deliver" data-v="'+c.id+'"'+(c.everified&&!c.delivered&&paidOrFree(c)?'':' disabled')+'>Deliver ITR-V + computation to client</button></div>'+(c.everified&&!c.delivered&&!paidOrFree(c)?'<div class="note warn">Pay-later client: documents are delivered after payment is confirmed. The client sees a payment request in their portal.</div>':'')+
    '<label for="itrv">Attach ITR-V (PDF)</label><input id="itrv" type="file" accept=".pdf" data-a="itrv" data-v="'+c.id+'"'+(c.filed?'':' disabled')+'>'+(c.itrv?'<div class="row"><span class="muted">Attached: '+esc(itrvName(c))+'</span>'+(LIVE&&c.itrv.fid?'<button class="btn" data-a="openFile" data-v="'+c.id+'" data-fid="'+esc(c.itrv.fid)+'">Open</button>':'')+'</div>':'')+'</div>'+
   '</div></div>';
 }
+function filingCard(c,RC){
+  const r=RC.routes,f=c.f;const yn=b=>b?'<b style="color:#166534">Open</b>':'<span style="color:#991B1B">Closed</span>';
+  return '<div class="note"><b>Filing route · '+esc(ayOf(f))+' · on '+esc(f.fileDate||TaxEngine.todayISO())+'</b><br>Original u/s 139(1) (due '+r.due+'): '+yn(r.original)+' · Belated 139(4) (till '+r.belatedEnd+'): '+yn(r.belated)+' · Updated ITR-U (till '+r.updatedEnd+'): '+yn(r.updated)+(r.updated?' at '+r.updatedRate+'% additional tax':'')+' · 119(2)(b) condonation: always possible on request</div>'+
+   (RC.errors.length?'<div class="note warn" style="border-color:#FCA5A5;background:#FEF2F2;color:#991B1B">'+RC.errors.map(esc).join('<br>')+'</div>':'')+(RC.warnings.length?'<div class="note warn">'+RC.warnings.map(esc).join('<br>')+'</div>':'');
+}
 function checks(c,B,sug){
   const f=c.f;const it=[];
   const ok=(t)=>it.push(['✓','#DCFCE7','#166534',t]),w=(t)=>it.push(['!','#FEF3C7','#92400E',t]),p=(t)=>it.push(['○','#F3F4F6','#374151',t]);
   /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(f.pan||'')?ok('PAN format valid'):w('PAN format looks wrong');
   N(f.tds)>0?ok('TDS entered: match it with 26AS'):w('No TDS entered: confirm with 26AS / AIS');
-  sug!==f.itr?w('Income mix suggests '+sug+' (chosen '+f.itr+')'):ok(f.itr+' fits the income entered');
+  sug.form!==f.itr?w('Income mix needs '+sug.form+' (chosen '+f.itr+'): '+sug.why.join(', ')):ok(f.itr+' fits: '+sug.why.join(', '));
   c.comp?ok('Computation saved: '+(c.comp.regime==='new'?'new':'old')+' regime'):p('Computation not saved yet');
   w('Foreign assets? Ask client. Schedule FA is mandatory for residents with any foreign asset');
   N(f.savingsInt)+N(f.fdInt)===0?w('No interest income: AIS usually shows some, so check'):ok('Interest income included');
@@ -449,7 +416,7 @@ function qrView(){
 function logView(){return '<h1>Activity log</h1><div class="card">'+DB.log.map(l=>'<div class="row" style="gap:14px;border-bottom:1px solid #F1F2F4;padding:6px 0"><span class="muted" style="min-width:120px">'+esc(l.t)+'</span><span style="min-width:90px;font-weight:500">'+esc(l.who)+'</span><span>'+esc(l.x)+'</span></div>').join('')+'</div>'}
 function settingsView(){
   const f=DB.settings.fees;
-  return '<h1>Settings &amp; backup</h1><div class="card"><h2>Standard fees</h2><div class="fgrid">'+Object.keys(f).map(k=>'<div><label for="fee_'+k+'">'+k+'</label><input id="fee_'+k+'" data-fee="'+k+'" inputmode="numeric" value="'+f[k]+'"></div>').join('')+'</div><div class="fgrid"><div><label for="ayS">Assessment year</label><select id="ayS"><option'+(DB.settings.ay==='AY 2027-28'?' selected':'')+'>AY 2027-28</option><option'+(DB.settings.ay==='AY 2026-27'?' selected':'')+'>AY 2026-27</option></select></div><div><label for="mst">Master account</label><input id="mst" value="'+esc(DB.settings.master)+'"></div></div><div class="row"><button class="btn p" data-a="saveSettings">Save settings</button></div></div>'+
+  return '<h1>Settings &amp; backup</h1><div class="card"><h2>Standard fees</h2><div class="fgrid">'+Object.keys(f).map(k=>'<div><label for="fee_'+k+'">'+k+'</label><input id="fee_'+k+'" data-fee="'+k+'" inputmode="numeric" value="'+f[k]+'"></div>').join('')+'</div><div class="fgrid"><div><label for="ayS">Default assessment year (new clients)</label><select id="ayS">'+AYS.slice().reverse().map(a=>'<option'+(DB.settings.ay===a?' selected':'')+'>'+a+'</option>').join('')+'</select></div><div><label for="mst">Master account</label><input id="mst" value="'+esc(DB.settings.master)+'"></div></div><div class="row"><button class="btn p" data-a="saveSettings">Save settings</button></div></div>'+
   '<div class="card"><h2>Backup</h2><span class="muted">'+(LIVE?'Live data is saved in Google Drive › Nisnil Tax, with a daily copy in Backups. You can also copy a backup here.':'Demo data stays only in this browser. Copy the backup and keep it safe.')+' Passwords stay encrypted inside it.</span><div class="row"><button class="btn" data-a="backup">Show backup</button><button class="btn" data-a="restore">Restore from backup</button><button class="btn r" data-a="reset">Reset to sample data</button></div></div>';
 }
 
@@ -458,13 +425,14 @@ function clientView(){
   if(LIVE&&!DB.clients.length)return '<div class="card"><h1>Start your ITR</h1><span class="muted">Welcome! Tell us who you are and we will open your income tax return file. You can upload documents and fill details now, and pay later.</span><div><label for="rgn">Full name (as on PAN)</label><input id="rgn"></div><div><label for="rgp">Mobile</label><input id="rgp" inputmode="tel"></div><button class="btn p" data-a="register">Start my ITR</button></div>';
   if(!S.clientAs||!C(S.clientAs))S.clientAs=DB.clients[0]&&DB.clients[0].id;
   const c=C(S.clientAs);
-  const fam=c?DB.clients.filter(x=>(x.f.email||'').toLowerCase()===(c.f.email||'').toLowerCase()):[];
-  const famBar=c?'<div class="card"><div class="row between"><h2>Family returns</h2><button class="btn" data-a="addFam">+ Add family member</button></div><span class="muted">File for yourself and your family from one login. Each person has their own documents, computation, fee and filed copy.</span><div class="row">'+fam.map(x=>'<button class="btn" data-a="pickFam" data-v="'+x.id+'" style="height:auto;padding:8px 12px;text-align:left;'+(x.id===c.id?'background:#111827;color:#fff;border-color:#111827':'')+'"><div style="font-weight:500">'+esc(x.f.name)+'</div><div style="font-size:12px;opacity:.8">'+esc(x.f.relation||'Self')+' · '+esc(status(x))+'</div></button>').join('')+'</div></div>':'';
+  const famAll=c?DB.clients.filter(x=>(x.f.email||'').toLowerCase()===(c.f.email||'').toLowerCase()):[];
+  const fam=famAll.filter((x,i)=>famAll.findIndex(y=>personKey(y)===personKey(x))===i).map(x=>personKey(x)===personKey(c)?c:x);
+  const famBar=c?'<div class="card"><div class="row between"><h2>Family returns</h2><button class="btn" data-a="addFam">+ Add family member / earlier year</button></div><span class="muted">File for yourself and your family from one login. Each person has their own documents, computation, fee and filed copy.</span><div class="row">'+fam.map(x=>'<button class="btn" data-a="pickFam" data-v="'+x.id+'" style="height:auto;padding:8px 12px;text-align:left;'+(personKey(x)===personKey(c)?'background:#111827;color:#fff;border-color:#111827':'')+'"><div style="font-weight:500">'+esc(x.f.name)+'</div><div style="font-size:12px;opacity:.8">'+esc(x.f.relation||'Self')+' · '+yearsOf(x).length+' year'+(yearsOf(x).length>1?'s':'')+'</div></button>').join('')+'</div></div>':'';
   const pick=LIVE?famBar:'<div class="card"><label for="cas">Signed in as (test: pick a client)</label><select id="cas" data-a="clientAs">'+DB.clients.map(x=>'<option value="'+x.id+'"'+(x.id===S.clientAs?' selected':'')+'>'+esc(x.f.name)+' · '+esc(x.f.email)+'</option>').join('')+'</select><span class="muted">Live version: “Sign in with Google”.</span></div>'+famBar;
   if(!c)return pick;
   const s=status(c);
   const B=c.comp;
-  return pick+'<h1>'+(fam.length>1?esc(c.f.name)+' · ':'Your ')+'ITR · '+esc(DB.settings.ay)+'</h1><div>'+pill(s==='Sent to client'?'Please review your computation':s,s==='Sent to client'?'Computation ready':s)+'</div>'+
+  return pick+(c?yearBar(c,'pickFam','addYearC'):'')+'<h1>'+(fam.length>1?esc(c.f.name)+' · ':'Your ')+'ITR · '+esc(ayOf(c.f))+'</h1><div>'+pill(s==='Sent to client'?'Please review your computation':s,s==='Sent to client'?'Computation ready':s)+'</div>'+
   '<div class="card"><h2>1. Upload your documents</h2>'+(c.docs.length?c.docs.map(d=>docRow(c,d)).join(''):'<span class="muted">Form 16, bank interest certificates, investment proofs, capital gains statements.</span>')+'<label for="cup">Add files</label><input id="cup" type="file" multiple data-a="upload" data-v="'+c.id+'"></div>'+
   '<div class="card"><h2>2. Fill your details</h2><span class="muted">Optional: fill what you know and we will check it. If you prefer, just upload documents and our team fills this for you. No payment needed for this step.</span>'+
    (c.f.filledBy?'<div class="note ok">Last updated by '+esc(c.f.filledBy)+'</div>':'')+
@@ -499,7 +467,7 @@ function closeModal(){layer.innerHTML=''}
 function compSheet(c,doc){
   const r=c.comp||(b0=>b0.best==='new'?b0.n:b0.o)(both(c.f));
   const L=(l,v,b)=>'<tr><td'+(b?' style="font-weight:600"':'')+'>'+l+'</td><td class="num"'+(b?' style="font-weight:600"':'')+'>'+INR(v)+'</td></tr>';
-  return '<div class="row between"><h2>Computation of total income · '+esc(DB.settings.ay)+'</h2>'+(doc?'':'<button class="btn" data-a="close">Close</button>')+'</div><div class="muted">'+esc(c.f.name)+' · PAN '+esc(c.f.pan)+' · '+esc(c.f.itr)+' · '+(r.regime==='new'?'New':'Old')+' regime</div><div class="tbl"><table><tbody>'+
+  return '<div class="row between"><h2>Computation of total income · '+esc(ayOf(c.f))+'</h2>'+(doc?'':'<button class="btn" data-a="close">Close</button>')+'</div><div class="muted">'+esc(c.f.name)+' · PAN '+esc(c.f.pan)+' · '+esc(c.f.itr)+' · '+(r.regime==='new'?'New':'Old')+' regime</div><div class="tbl"><table><tbody>'+
   L('Income from salary',r.salInc)+L('House property',r.hp)+L('Other sources',r.oth)+L('Business (presumptive)',r.biz)+L('Capital gains',r.stO+r.special)+L('Gross total income',r.gti,1)+L('Less: deductions',-r.ded)+L('Total income',r.total,1)+L('Tax on total income',r.taxN+r.taxS)+L('Less: rebate / relief',-(r.reb+r.mr))+L('Surcharge',r.surch)+L('Cess 4%',r.cess)+L('Total tax liability',r.liab,1)+L('Less: TDS / taxes paid',-r.paid)+L(r.net<0?'Refund due':'Tax payable',Math.abs(r.net),1)+
   '</tbody></table></div><span class="muted">Prepared by Nisnil Tax</span>';
 }
@@ -549,11 +517,11 @@ document.addEventListener('click',async e=>{
     case 'saveDrive':try{await saveToDrive(c)}catch(err){toast(err.message)}break;
     case 'register':{const n=val('rgn'),ph=val('rgp');if(n.length<3){toast('Enter your full name');break}try{apply(await api('register',{name:n,phone:ph,relation:'Self'}))}catch(err){toast(err.message)}break}
     case 'pickFam':S.clientAs=v;render();window.scrollTo(0,0);break;
-    case 'addFam':modal('<div class="row between"><h2>Add a family member</h2><button class="btn" data-a="close">Close</button></div><span class="muted">Their return is filed separately, under your login. You can upload their documents and pay their fee from here.</span><div class="fgrid"><div><label for="fmn">Full name (as on PAN)</label><input id="fmn"></div><div><label for="fmr">Relation</label><select id="fmr"><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Brother</option><option>Sister</option><option>Other</option></select></div><div><label for="fmp">PAN (optional)</label><input id="fmp" maxlength="10" style="text-transform:uppercase"></div></div><button class="btn p" data-a="addFamYes">Add</button>');break;
-    case 'addFamYes':{const n=val('fmn'),r=val('fmr'),pn=val('fmp').toUpperCase();if(n.length<3){toast('Enter the full name');break}if(pn&&!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pn)){toast('PAN format looks wrong');break}
+    case 'addFam':modal('<div class="row between"><h2>Add a family member</h2><button class="btn" data-a="close">Close</button></div><span class="muted">Their return is filed separately, under your login. You can upload their documents and pay their fee from here.</span><div class="fgrid"><div><label for="fmn">Full name (as on PAN)</label><input id="fmn"></div><div><label for="fmr">Relation</label><select id="fmr"><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Brother</option><option>Sister</option><option>Other</option></select></div><div><label for="fmp">PAN (optional)</label><input id="fmp" maxlength="10" style="text-transform:uppercase"></div><div><label for="fma">Assessment year</label><select id="fma">'+AYS.slice().reverse().map(a=>'<option'+(a===DB.settings.ay?' selected':'')+'>'+a+'</option>').join('')+'</select></div></div><span class="muted">Earlier years (AY 2023-24 onwards) can be filed late with interest, or as an updated return (ITR-U). We will tell you the best route.</span><button class="btn p" data-a="addFamYes">Add</button>');break;
+    case 'addFamYes':{const n=val('fmn'),r=val('fmr'),pn=val('fmp').toUpperCase(),fa=val('fma');if(n.length<3){toast('Enter the full name');break}if(pn&&!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pn)){toast('PAN format looks wrong');break}
       const me=C(S.clientAs);
-      if(LIVE){try{const before=DB.clients.map(x=>x.id);apply(await api('register',{name:n,relation:r,pan:pn,family:true}));const nw=DB.clients.find(x=>before.indexOf(x.id)<0);if(nw)S.clientAs=nw.id;closeModal();render();toast('Added '+n)}catch(err){toast(err.message)}break}
-      const f=Object.assign({},me.f);Object.keys(f).forEach(k=>f[k]=typeof f[k]==='number'?0:'');Object.assign(f,{age:'below60',hpType:'none',itr:'ITR-1',name:n,pan:pn,email:me.f.email,phone:me.f.phone,relation:r});
+      if(LIVE){try{const before=DB.clients.map(x=>x.id);apply(await api('register',{name:n,relation:r,pan:pn,ay:fa,family:true}));const nw=DB.clients.find(x=>before.indexOf(x.id)<0);if(nw)S.clientAs=nw.id;closeModal();render();toast('Added '+n)}catch(err){toast(err.message)}break}
+      const f=Object.assign({},me.f);Object.keys(f).forEach(k=>f[k]=typeof f[k]==='number'?0:'');Object.assign(f,{age:'below60',hpType:'none',itr:'ITR-1',name:n,pan:pn,email:me.f.email,phone:me.f.phone,relation:r,ay:fa});
       const nc={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees['ITR-1'],feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'};
       DB.clients.unshift(nc);S.clientAs=nc.id;log('Added family member '+n+' ('+r+')','Client · '+me.f.name);closeModal();save();break}
     case 'role':if(LIVE)break;S.role=v;S.view=v==='owner'?'dash':'queue';S.cur=null;S.reveal={};S.emp=null;S.vaultKey=null;render();break;
@@ -569,10 +537,23 @@ document.addEventListener('click',async e=>{
     case 'tab':S.tab=v;render();break;
     case 'open':S.cur=v;S.view='job';render();window.scrollTo(0,0);break;
     case 'newClient':{const f=Object.assign({},DB.clients[0]?DB.clients[0].f:{});Object.keys(f).forEach(k=>f[k]=typeof f[k]==='number'?0:'');Object.assign(f,{age:'below60',hpType:'none',itr:'ITR-1',name:'New client',pan:''});const n={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees['ITR-1'],feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'};DB.clients.unshift(n);log('Created client');S.cur=n.id;S.view='job';save();break}
+    case 'addYearC':{const have=yearsOf(c).map(x=>ayOf(x.f)),left=AYS.filter(a=>have.indexOf(a)<0);if(!left.length){toast('All years are already added');break}
+      modal('<div class="row between"><h2>Add a year for '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><span class="muted">Missed an earlier year? We can still file it: late with interest, as an updated return (ITR-U), or with a condonation request. We will tell you the best route after seeing your documents.</span><div class="fgrid"><div><label for="cya">Assessment year</label><select id="cya">'+left.slice().reverse().map(a=>'<option>'+a+' (FY '+TaxEngine.YEARS[a].fy+')</option>').join('')+'</select></div></div><button class="btn p" data-a="addYearCYes" data-v="'+c.id+'">Add year</button>');break}
+    case 'addYearCYes':{const ay=val('cya').split(' (')[0];
+      if(LIVE){try{const before=DB.clients.map(x=>x.id);apply(await api('register',{name:c.f.name,relation:c.f.relation||'Self',pan:c.f.pan,ay,family:true}));const nw=DB.clients.find(x=>before.indexOf(x.id)<0);if(nw)S.clientAs=nw.id;closeModal();render();toast(ay+' added')}catch(err){toast(err.message)}break}
+      const f={};['name','pan','email','phone','age','relation'].forEach(k=>f[k]=c.f[k]);Object.assign(f,{ay,itr:'ITR-1',hpType:'none'});
+      const nc={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees['ITR-1'],feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:null,assigned:'Preparer 1'};
+      DB.clients.unshift(nc);S.clientAs=nc.id;log('Added '+ay+' for '+c.f.name,'Client · '+c.f.name);closeModal();save();break}
+    case 'copyYear':modal('<div class="row between"><h2>Start another year for '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><span class="muted">Copies name, PAN, contact, address, bank and employer. Income, deductions and taxes start at zero.</span><div class="fgrid"><div><label for="cya">Assessment year</label><select id="cya">'+AYS.filter(a=>yearsOf(c).every(x=>ayOf(x.f)!==a)).reverse().map(a=>'<option>'+a+'</option>').join('')+'</select></div></div><button class="btn p" data-a="copyYearYes" data-v="'+c.id+'">Create</button>');break;
+    case 'copyYearYes':{const ay=val('cya');if(DB.clients.some(x=>x.f.pan&&x.f.pan===c.f.pan&&ayOf(x.f)===ay)){toast(ay+' already exists for this PAN');break}
+      const keep=['name','pan','email','phone','age','relation','dob','aadhaar','fatherName','addrRes','addrArea','addrCity','addrState','addrPin','empCat','empName','empTAN','bankIFSC','bankName','bankAcc','bankType','residency','hpType','exemptNature','hraMetro','itrMode'];
+      const f={};keep.forEach(k=>{if(c.f[k]!=null)f[k]=c.f[k]});Object.assign(f,{ay,itr:c.f.itr||'ITR-1',fileSec:'11'});
+      const n={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees[f.itr]||0,feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:c.cred,assigned:c.assigned};
+      DB.clients.unshift(n);log('Started '+ay+' for '+c.f.name);closeModal();S.cur=n.id;S.view='job';save();toast(ay+' created');break}
     case 'delClient':if(S.role!=='owner')break;modal('<h2>Delete '+esc(c.f.name)+'?</h2><p>This removes the client and their saved login from this console.</p><div class="row"><button class="btn r" data-a="delYes" data-v="'+c.id+'">Delete</button><button class="btn" data-a="close">Cancel</button></div>');break;
     case 'delYes':DB.clients=DB.clients.filter(x=>x.id!==v);log('Deleted client '+c.f.name);closeModal();S.view='queue';S.cur=null;save();break;
     case 'close':closeModal();break;
-    case 'saveComp':{readF(c);c.f.filledBy=(S.role==='owner'?'Owner':empName())+' ('+now()+')';const B=both(c.f);c.comp=Object.assign({},B.best==='new'?B.n:B.o);if(!c.feeReq||c.feeReq.state!=='approved')c.fee=DB.settings.fees[c.f.itr]||c.fee;if(c.approval!=='none'||c.sent){if(c.approval==='approved')log('Computation changed after approval: approval reset for '+c.f.name);c.approval='none';c.sent=false}log('Computed '+c.f.name+' ('+B.best+' regime, '+INR(c.comp.net)+')');save();toast('Saved and computed');break}
+    case 'saveComp':{readF(c);if(!c.f.ay)c.f.ay=ayOf(c.f);if(c.f.itrMode!=='manual'){const sg=suggestITR(c.f).form;if(sg!==c.f.itr){toast('ITR form set to '+sg);log(c.f.name+': ITR form auto-set to '+sg+' (was '+c.f.itr+')');c.f.itr=sg}}const RCx=routeCheck(c.f,null);if(RCx.errors.length)toast('Check filing route: '+RCx.errors[0]);c.f.filledBy=(S.role==='owner'?'Owner':empName())+' ('+now()+')';const B=both(c.f);c.comp=Object.assign({},B.best==='new'?B.n:B.o);if(!c.feeReq||c.feeReq.state!=='approved')c.fee=DB.settings.fees[c.f.itr]||c.fee;if(c.approval!=='none'||c.sent){if(c.approval==='approved')log('Computation changed after approval: approval reset for '+c.f.name);c.approval='none';c.sent=false}log('Computed '+c.f.name+' ('+B.best+' regime, '+INR(c.comp.net)+')');save();toast('Saved and computed');break}
     case 'send':if(!c.comp)break;c.sent=true;c.approval='none';c.reason='';log('Sent computation to '+c.f.name);save();toast('Sent to client portal');break;
     case 'viewComp':modal(compSheet(c));break;
     case 'markPaid':c.pay={state:'paid',method:'Razorpay',utr:''};log('Recorded Razorpay payment '+INR(c.fee)+' for '+c.f.name);save();break;
@@ -588,11 +569,11 @@ document.addEventListener('click',async e=>{
       if(c.f.itr==='ITR-1'&&window.ITR1){const g=ITR1.buildITR1(c.f,c.comp,{city:'Ahmedabad'});
         if(g.errors.length){modal('<div class="row between"><h2>Fix before generating · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="note bad">'+g.errors.map(esc).join('<br>')+'</div>'+(g.warnings.length?'<div class="note warn">'+g.warnings.map(esc).join('<br>')+'</div>':''));break}
         const txt=JSON.stringify(g.json);log('Generated ITR-1 JSON for '+c.f.name);persist();if(LIVE)liveSave();
-        modal('<div class="row between"><h2>ITR-1 JSON · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="note ok">Built in the official AY 2026-27 ITR-1 format.</div>'+(g.warnings.length?'<div class="note warn">'+g.warnings.map(esc).join('<br>')+'</div>':'')+'<textarea class="code" readonly id="jt">'+esc(txt)+'</textarea><div class="row"><button class="btn" data-a="copyTxt">Copy</button><button class="btn p" data-a="dlJson" data-v="'+c.id+'" data-kind="itr1">Download .json</button></div>');break}const r=c.comp;const out={_note:'DRAFT internal format from Nisnil Income Tax console. NOT for upload to the e-filing portal until the official schema is mapped.',assessmentYear:DB.settings.ay,form:c.f.itr,pan:c.f.pan,name:c.f.name,regime:r.regime,income:{salary:r.salInc,houseProperty:r.hp,otherSources:r.oth,business:r.biz,capitalGainsSlab:r.stO,capitalGainsSpecial:{s111A:r.s111,s112A:r.l112,otherLTCG:r.lO}},grossTotalIncome:r.gti,deductions:r.ded,totalIncome:r.total,tax:{slab:Math.round(r.taxN),special:Math.round(r.taxS),rebate87A:Math.round(r.reb),marginalRelief:Math.round(r.mr),surcharge:Math.round(r.surch),cess:Math.round(r.cess),liability:r.liab},taxesPaid:r.paid,payableOrRefund:r.net,inputs:c.f};
+        modal('<div class="row between"><h2>ITR-1 JSON · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="note ok">Built in the official AY 2026-27 ITR-1 format.</div>'+(g.warnings.length?'<div class="note warn">'+g.warnings.map(esc).join('<br>')+'</div>':'')+'<textarea class="code" readonly id="jt">'+esc(txt)+'</textarea><div class="row"><button class="btn" data-a="copyTxt">Copy</button><button class="btn p" data-a="dlJson" data-v="'+c.id+'" data-kind="itr1">Download .json</button></div>');break}const r=c.comp;const out={_note:'DRAFT internal format from Nisnil Income Tax console. NOT for upload to the e-filing portal until the official schema is mapped.',assessmentYear:ayOf(c.f),form:c.f.itr,pan:c.f.pan,name:c.f.name,regime:r.regime,income:{salary:r.salInc,houseProperty:r.hp,otherSources:r.oth,business:r.biz,capitalGainsSlab:r.stO,capitalGainsSpecial:{s111A:r.s111,s112A:r.l112,otherLTCG:r.lO}},grossTotalIncome:r.gti,deductions:r.ded,totalIncome:r.total,tax:{slab:Math.round(r.taxN),special:Math.round(r.taxS),rebate87A:Math.round(r.reb),marginalRelief:Math.round(r.mr),surcharge:Math.round(r.surch),cess:Math.round(r.cess),liability:r.liab},taxesPaid:r.paid,payableOrRefund:r.net,inputs:c.f};
       const txt=JSON.stringify(out,null,2);log('Generated draft JSON for '+c.f.name);persist();
       modal('<div class="row between"><h2>Draft JSON · '+esc(c.f.name)+'</h2><button class="btn" data-a="close">Close</button></div><div class="note warn">Draft for checking only. Not in the official portal schema yet.</div><textarea class="code" readonly id="jt">'+esc(txt)+'</textarea><div class="row"><button class="btn" data-a="copyTxt">Copy</button>'+'<button class="btn p" data-a="dlJson" data-v="'+c.id+'">Download .json</button>'+'</div>');break}
     case 'copyTxt':copy(document.getElementById('jt').value);break;
-    case 'dlJson':try{saveBlob(c.f.pan+(el.dataset.kind==='itr1'?'_ITR1_AY2026-27.json':'_'+DB.settings.ay.replace(/\s/g,'')+'_draft.json'),new Blob([document.getElementById('jt').value],{type:'application/json'}))}catch(err){toast('Download blocked here: use Copy')}break;
+    case 'dlJson':try{saveBlob(c.f.pan+(el.dataset.kind==='itr1'?'_ITR1_AY2026-27.json':'_'+ayOf(c.f).replace(/\s/g,'')+'_draft.json'),new Blob([document.getElementById('jt').value],{type:'application/json'}))}catch(err){toast('Download blocked here: use Copy')}break;
     case 'markFiled':{const ack=val('ack');if(!/^\d{8,20}$/.test(ack)){toast('Enter the acknowledgement number (digits)');break}c.filed={ack,d:now()};log('Marked filed, ack '+ack+', for '+c.f.name);save();break}
     case 'everify':c.everified=true;log('E-verified return of '+c.f.name);save();break;
     case 'deliver':if(!paidOrFree(c)){toast('Payment not confirmed yet');break}c.delivered=true;log('Delivered ITR-V and computation to '+c.f.name);save();toast('Delivered to client portal');break;
