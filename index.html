@@ -330,12 +330,12 @@ function jobView(c){
   const o=B.o,n=B.n;
   const canGen=c.approval==='approved'&&cleared(c);
   const credHtml=c.cred?('<div class="row between"><span class="muted">User ID</span><span class="mono">'+esc(c.cred.user)+'</span></div><div class="row between"><span class="muted">Password</span><span class="mono">'+(S.reveal[c.id]?esc(S.reveal[c.id]):'••••••••••')+'</span></div><div class="row"><button class="btn" data-a="reveal" data-v="'+c.id+'">'+(S.reveal[c.id]?'Hide':'Reveal · logged')+'</button><button class="btn" data-a="copyPass" data-v="'+c.id+'">Copy · logged</button><button class="btn" data-a="editCred" data-v="'+c.id+'">Change</button></div>'):'<button class="btn" data-a="editCred" data-v="'+c.id+'">+ Save portal login</button>';
-  return '<div class="row between"><div class="row"><button class="btn" data-a="nav" data-v="queue">← Queue</button><h1>'+esc(c.f.name)+'</h1><span class="mono muted">'+esc(c.f.pan)+'</span>'+pill(c.f.itr+' · '+ayOf(c.f),'New')+pill(s)+'</div>'+'<div class="row"><button class="btn" data-a="copyYear" data-v="'+c.id+'">Copy to another year</button>'+(owner?'<button class="btn r" data-a="delClient" data-v="'+c.id+'">Delete client</button>':'')+'</div></div>'+yearBar(c,'open','copyYear')+
+  return '<div class="row between"><div class="row"><button class="btn" data-a="nav" data-v="queue">← Queue</button><h1>'+esc(c.f.name)+'</h1><span class="mono muted">'+esc(c.f.pan)+'</span>'+pill(c.f.itr+' · '+ayOf(c.f),'New')+pill(s)+'</div>'+'<div class="row"><button class="btn" data-a="copyYear" data-v="'+c.id+'">Copy to another year</button>'+(owner?'<button class="btn r" data-a="delClient" data-v="'+c.id+'">Delete '+esc(ayOf(c.f))+' return</button>':'')+'</div></div>'+yearBar(c,'open','copyYear')+
   '<div class="steps">'+FLOW.map((x,i)=>'<span class="pill" style="'+(i<cur?'background:#E6F4F1;color:#115E59':i===cur?'background:#111827;color:#fff':'background:#fff;color:#6B7280;border:1px solid #E5E7EB')+'">'+(i<cur?'✓ ':'')+x+'</span>').join('')+'</div>'+
   (c.approval==='rejected'?'<div class="note bad">Client rejected the computation: “'+esc(c.reason||'no reason given')+'”. Fix and resend.</div>':'')+
   '<div class="cols"><div class="c1">'+
    '<div class="card"><h2>1. Prefill data</h2>'+(c.prefill?'<div class="note ok">Prefill imported'+(c.prefillInfo?': '+esc(c.prefillInfo):'')+'</div>':'<div class="note info">Download from the e-filing portal: e-File → Income Tax Returns → Download pre-filled data. Then choose the file here.</div>')+
-   '<label for="pf">Import prefill JSON</label><input id="pf" type="file" accept=".json,application/json" data-a="prefill" data-v="'+c.id+'"><span class="muted">Reads common fields (PAN, name, DOB, salary, TDS, bank interest). Always check the figures before computing.</span></div>'+
+   '<label for="pf">Import prefill JSON</label><input id="pf" type="file" accept=".json,application/json" data-a="prefill" data-v="'+c.id+'"><span class="muted">Reads the assessment year and common fields (PAN, name, DOB, salary, TDS, bank interest). Always check the figures before computing.</span></div>'+
    '<div class="card"><h2>Portal login</h2>'+credHtml+'<span class="muted">Stored encrypted under '+esc(DB.settings.master)+'. Every reveal and copy is logged.</span></div>'+
    '<div class="card"><h2>2. Client documents</h2>'+(c.f.filledBy?'<span class="muted">Details last filled by '+esc(c.f.filledBy)+'</span>':'')+(c.f.notes?'<div class="note info">Client note: '+esc(c.f.notes)+'</div>':'')+(c.docs.length?c.docs.map(d=>docRow(c,d)).join(''):'<span class="muted">No documents yet. Client uploads from their portal, or add here.</span>')+'<label for="up">Add document</label><input id="up" type="file" multiple data-a="upload" data-v="'+c.id+'"></div>'+
    '<div class="card"><h2>3. Checks before filing</h2>'+checks(c,B,sug)+'</div>'+
@@ -480,12 +480,16 @@ function credForm(c){
 
 /* ---------- prefill parser (best effort) ---------- */
 function walk(o,fn,path){if(o&&typeof o==='object'){for(const k in o){const v=o[k];fn(k,v,path);walk(v,fn,(path||'')+'.'+k)}}}
+/* "2026", "2026-27", "AY 2026-27", "2026-2027" → "AY 2026-27"; plus=1 when the value is a financial year */
+function ayFrom(v,plus){const m=String(v).match(/(20\d\d)/);if(!m)return '';const y=parseInt(m[1])+(plus||0);const a='AY '+y+'-'+String((y+1)%100).padStart(2,'0');return TaxEngine.YEARS[a]?a:''}
 function parsePrefill(j){
   const found={};const take=(name,v)=>{if(found[name]==null&&v!=null&&v!=='')found[name]=v};
   walk(j,(k,v)=>{
     const K=k.toLowerCase();
     if(typeof v==='object')return;
-    if(K==='pan'||K==='assesseepan')take('pan',String(v).toUpperCase());
+    if(K==='assessmentyear'||K==='assessment_year'||K==='ay'||K==='asstyear'||K==='assmntyear'){const a=ayFrom(v,0);if(a)take('ay',a)}
+    else if(K==='financialyear'||K==='fy'||K==='finyear'){const a=ayFrom(v,1);if(a)take('ay',a)}
+    else if(K==='pan'||K==='assesseepan')take('pan',String(v).toUpperCase());
     else if(K==='firstname')take('first',v);
     else if(K==='surnameororgname'||K==='lastname')take('last',v);
     else if(K==='dob'||K==='dateofbirth')take('dob',v);
@@ -552,8 +556,8 @@ document.addEventListener('click',async e=>{
       const f={};keep.forEach(k=>{if(c.f[k]!=null)f[k]=c.f[k]});Object.assign(f,{ay,itr:c.f.itr||'ITR-1',fileSec:'11'});
       const n={id:uid(),f,docs:[],prefill:false,comp:null,sent:false,approval:'none',reason:'',pay:{state:'unpaid',method:'',utr:''},fee:DB.settings.fees[f.itr]||0,feeReq:null,credit:false,filed:null,everified:false,delivered:false,cred:c.cred,assigned:c.assigned};
       DB.clients.unshift(n);log('Started '+ay+' for '+c.f.name);closeModal();S.cur=n.id;S.view='job';save();toast(ay+' created');break}
-    case 'delClient':if(S.role!=='owner')break;modal('<h2>Delete '+esc(c.f.name)+'?</h2><p>This removes the client and their saved login from this console.</p><div class="row"><button class="btn r" data-a="delYes" data-v="'+c.id+'">Delete</button><button class="btn" data-a="close">Cancel</button></div>');break;
-    case 'delYes':DB.clients=DB.clients.filter(x=>x.id!==v);log('Deleted client '+c.f.name);closeModal();S.view='queue';S.cur=null;save();break;
+    case 'delClient':if(S.role!=='owner')break;modal('<h2>Delete '+esc(ayOf(c.f))+' return of '+esc(c.f.name)+'?</h2><p>'+(yearsOf(c).length>1?'Only this year is removed: its details, documents list, computation and fee. The other years ('+yearsOf(c).filter(x=>x.id!==c.id).map(x=>esc(ayOf(x.f))).join(', ')+') and the saved login stay.':'This is the only year for this client, so the client and their saved login are removed from this console.')+'</p><div class="row"><button class="btn r" data-a="delYes" data-v="'+c.id+'">Delete</button><button class="btn" data-a="close">Cancel</button></div>');break;
+    case 'delYes':{const rest=yearsOf(c).filter(x=>x.id!==v);if(c.cred)rest.forEach(x=>{if(!x.cred)x.cred=c.cred});DB.clients=DB.clients.filter(x=>x.id!==v);log('Deleted '+ayOf(c.f)+' return of '+c.f.name);closeModal();if(rest.length){S.cur=rest[rest.length-1].id;S.view='job'}else{S.view='queue';S.cur=null}save();toast(ayOf(c.f)+' return deleted');break}
     case 'close':closeModal();break;
     case 'saveComp':{readF(c);if(!c.f.ay)c.f.ay=ayOf(c.f);if(c.f.itrMode!=='manual'){const sg=suggestITR(c.f).form;if(sg!==c.f.itr){toast('ITR form set to '+sg);log(c.f.name+': ITR form auto-set to '+sg+' (was '+c.f.itr+')');c.f.itr=sg}}const RCx=routeCheck(c.f,null);if(RCx.errors.length)toast('Check filing route: '+RCx.errors[0]);c.f.filledBy=(S.role==='owner'?'Owner':empName())+' ('+now()+')';const B=both(c.f);c.comp=Object.assign({},B.best==='new'?B.n:B.o);if(!c.feeReq||c.feeReq.state!=='approved')c.fee=DB.settings.fees[c.f.itr]||c.fee;if(c.approval!=='none'||c.sent){if(c.approval==='approved')log('Computation changed after approval: approval reset for '+c.f.name);c.approval='none';c.sent=false}log('Computed '+c.f.name+' ('+B.best+' regime, '+INR(c.comp.net)+')');save();toast('Saved and computed');break}
     case 'send':if(!c.comp)break;c.sent=true;c.approval='none';c.reason='';log('Sent computation to '+c.f.name);save();toast('Sent to client portal');break;
@@ -612,9 +616,11 @@ document.addEventListener('change',async e=>{
   if(a==='prefill'&&c&&el.files[0]){
     try{const txt=await el.files[0].text();const j=JSON.parse(txt);const g=parsePrefill(j);
       readF(c);
+      if(!g.ay){const fm=el.files[0].name.match(/20\d\d/);if(fm)g.ay=ayFrom(fm[0],0)}
+      if(g.ay&&g.ay!==ayOf(c.f)){const pan=g.pan||c.f.pan,dup=DB.clients.find(x=>x.id!==c.id&&pan&&x.f.pan===pan&&ayOf(x.f)===g.ay);if(dup){toast(g.ay+' already exists for this PAN: open that year and import there');return}c.f.ay=g.ay;toast('Year set from prefill: '+g.ay)}
       if(g.pan)c.f.pan=g.pan;if(g.first||g.last)c.f.name=[g.first,g.last].filter(Boolean).join(' ');if(g.email)c.f.email=g.email;
       ['salary','savingsInt','fdInt','tds','dividend'].forEach(k=>{if(g[k]!=null)c.f[k]=g[k]});
-      if(g.dob){const y=parseInt(String(g.dob).slice(0,4))||parseInt(String(g.dob).slice(-4));if(y){const age=2027-y;c.f.age=age>=80?'80plus':age>=60?'60to79':'below60'}}
+      if(g.dob){const y=parseInt(String(g.dob).slice(0,4))||parseInt(String(g.dob).slice(-4));if(y){const age=TaxEngine.rules(ayOf(c.f)).start-y;c.f.age=age>=80?'80plus':age>=60?'60to79':'below60'}}
       const keys=Object.keys(g);c.prefill=true;c.prefillInfo=keys.length?'found '+keys.join(', '):'file read, but no known fields matched: enter figures manually';
       log('Imported prefill JSON for '+c.f.name+' ('+keys.length+' fields)');save();toast(keys.length?'Prefill imported: check the figures':'No known fields found');
     }catch(err){toast('Not a valid JSON file')}
