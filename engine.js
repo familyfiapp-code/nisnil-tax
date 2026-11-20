@@ -85,7 +85,7 @@
     var r = { ay: ay, regime: regime, sal: sal, exA: exA, std: std, pt: pt, salInc: salInc, hp: hp, oth: oth, biz: biz, stO: stO, special: special, s111: s111, l112: l112, lO: lO, gti: gti, ded: ded, total: total, taxN: taxN, taxS: taxS, t111: t111, t112: t112, tLO: tLO, reb: reb, mr: mr, surch: surch, cess: cess, liab: liab, tds: tds, tcs: tcs, adv: adv, sat: sat, paid: paid, surchargeNote: total > 5000000 };
     var x = charges(f, r, Y);
     for (var k in x) r[k] = x[k];
-    r.net = r.liab + r.i234A + r.i234B + r.i234C + r.f234F + r.addTax - paid;
+    r.net = Math.round((r.liab + r.i234A + r.i234B + r.i234C + r.f234F - paid) / 10) * 10 + r.addTax; /* s.288B: round to ₹10 */
     return r;
   }
 
@@ -150,6 +150,7 @@
         out.i234A = Math.round(out.i234A);
       }
       out.months234A = months(from, fd);
+      if (Y.split && out.i234A > 0) out.notes.push('234A counted from the extended due date 16-Sep-2025 (CBDT Circulars 06/2025 and 12/2025). The portal calculator defaults to 31-Jul-2025, which gives one month more.');
       var exLim = (r.regime === 'old' ? (OLD[f.age] || OLD.below60) : Y.newSlabs)[0][0];
       /* no fee where filing was not compulsory: income before Chapter VI-A deductions within the exemption limit */
       out.f234F = r.gti <= exLim ? 0 : r.total <= 500000 ? 1000 : 5000;
@@ -161,7 +162,9 @@
       var mU = months(addDay(endAY), fd); out.monthsU = cmp(fd, endAY) <= 0 ? 0 : mU;
       var rate = out.monthsU <= 12 ? .25 : out.monthsU <= 24 ? .50 : out.monthsU <= 36 ? .60 : out.monthsU <= 48 ? .70 : 0;
       out.addRate = rate;
-      var payable = r.liab + out.i234A + out.i234B + out.i234C - r.tds - r.tcs - advT;
+      /* as on the official calculator: aggregate (tax + interest + fee) rounded to ₹10 u/s 288B,
+         then additional tax on that aggregate excluding the 234F fee */
+      var payable = Math.round((r.liab + out.i234A + out.i234B + out.i234C + out.f234F - r.tds - r.tcs - advT) / 10) * 10 - out.f234F;
       var earlier = f.origFiled === 'Y' ? N(f.origTaxPaid) - N(f.origRefund) : 0;
       var baseU = payable - earlier;
       if (rate > 0 && baseU > 0) out.addTax = Math.round(baseU * rate);
